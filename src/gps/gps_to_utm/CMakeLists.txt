@@ -78,6 +78,7 @@ install(
 
 # Install Python scripts
 install(PROGRAMS
+  src/f9p_to_csv.py
   src/f9r_to_csv.py
   DESTINATION lib/${PROJECT_NAME}
 )
