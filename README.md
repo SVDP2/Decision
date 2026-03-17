@@ -31,3 +31,65 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
   - Leader는 GPS path를 rrt 타겟으로 사용해 콘 사이를 주행한다. GPS path는 전방 목표점을 만드는 용도이고 실제 주행에 사용되는 local 경로는 LiDAR로 생성한 cone 맵 위에서 RRT 브랜치를 고른 뒤 사용한다. **GPS가 장거리 목표를 주고, LiDAR을 이용하여 근거리 장애물/cone 맵을 만들어 local waypoint**를 생성하며, Follower는 Leader가 선택한 진행 흐름을 안정적으로 추종하는 것을 검증
   - LiDAR Cone Detection, cone map generation, GPS path 기반 장거리 target point 생성, local free-space / obstacle map, RRT 또는 local branch selection, local waypoint 생성 및 추종 제어, vehicle localization, leader-follower relative pose 또는 distance estimation, follower tracking 안정성 확인, VLM Complex transition
     - Sensor Requirements: GPS/RTK, cone 및 근거리 obstacle 인지를 위한 LiDAR, leader-follower relative pose
+
+# Mission Supervisor 구상
+
+- Mission supervisor는 **mission layer**와 **safety layer**를 분리한 **선점형 상태 기계(preemptive state machine) 노드**로 구성
+- Mission layer는 README에서 정의한 **Highway / City / Complex** 3개 상태를 관리하며, **VLM의 context 정보**를 이용해 현재 주행 환경을 구분하고 상태를 전이
+- 각 mission 상태에서는 서로 다른 주행 알고리즘 또는 파라미터를 적용
+  - Highway: 상대적으로 고속의 GPS path 기반 주행
+  - City: 저속 주행, 보행자/횡단보도/신호 대응 중심
+  - Complex: LiDAR 기반 local map과 **RRT** 등을 사용하는 복잡 환경 주행
+- Mission layer의 상태 전이는 아래와 같이 표현 가능
+
+```mermaid
+flowchart LR
+  H["HIGHWAY<br/>(high-speed GPS path tracking)"]
+  C["CITY<br/>(low-speed city driving)"]
+  X["COMPLEX<br/>(LiDAR local map + RRT)"]
+  KEEP["KEEP_MISSION<br/>(no context change)"]
+
+  H -->|city / intersection / crosswalk / traffic-light zone| C
+  H -->|cone zone / dense obstacle / unstructured area| X
+
+  C -->|highway main road / obstacle-free | H
+  C -->|cone zone / complex local navigation area| X
+
+  X -->|normal road / intersection / crosswalk / traffic-light zone| C
+  X -->|highway main road / simple fast segment| H
+
+  H -->|context unchanged| KEEP
+  C -->|context unchanged| KEEP
+  X -->|context unchanged| KEEP
+```
+
+- Safety layer는 mission layer와 분리되어 동작하며, **항상 더 높은 우선순위**로 vehicle command를 선점
+- 따라서 현재 mission이 Highway, City, Complex 중 무엇이든 관계없이, **VLM + LiDAR**를 통해 신호등, 보행자, 근접 장애물이 위험하다고 판단되면 **항상 정지 명령을 우선 적용**
+- Safety layer의 선점 조건은 아래와 같이 표현 가능
+
+```mermaid
+flowchart LR
+  SAFE_OK["SAFE_OK<br/>(no stop signals)"]
+  LIDAR["LiDAR<br/>(pedestrian proximity)"]
+  VLM["VLM<br/>(context)"]
+  STOP_LIGHT["STOP_TRAFFIC<br/>(traffic_stop == true && intersection == true)"]
+  STOP_PED["STOP_PEDESTRIAN<br/>(pedestrian close == true)"]
+  STOP_OBS["STOP_OBSTACLE<br/>(obstacle close == true)"]
+  SAFETY_HOLD["SAFETY_HOLD<br/>(brake / throttle = 0)"]
+  PREV["PREV_MISSION<br/>(return after release)"]
+
+  VLM --> STOP_LIGHT
+  VLM --> STOP_PED
+  LIDAR --> STOP_PED
+  VLM --> STOP_OBS
+  LIDAR --> STOP_OBS
+
+  STOP_LIGHT -->|preempt mission command| SAFETY_HOLD
+  STOP_PED -->|preempt mission command| SAFETY_HOLD
+  STOP_OBS -->|preempt mission command| SAFETY_HOLD
+
+  SAFETY_HOLD -->|all stop signals false + release condition satisfied| PREV
+  SAFE_OK -->|no preemption| PREV
+```
+
+- 정리하면, mission layer는 "어떤 주행 전략을 쓸지"를 결정하고, safety layer는 "지금 당장 멈춰야 하는지"를 최우선으로 판단하는 구조로 이해함
