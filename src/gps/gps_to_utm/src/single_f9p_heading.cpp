@@ -149,7 +149,7 @@ private:
 
   void velocity_callback(const geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr msg)
   {
-    last_velocity_msg_ = msg;
+    last_velocity_msg_ = *msg;
   }
 
   void utm_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg)

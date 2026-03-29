@@ -17,7 +17,7 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=false \
-  csv_file_path: = gps csv 경로
+  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_14-16_23_49.csv
 ```
 
 - 토픽,TF 확인

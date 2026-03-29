@@ -11,8 +11,7 @@ from launch_ros.actions import Node
 
 
 DEFAULT_CSV_PATH = (
-    '/Users/yoosm/FinalProject/GP_Decision/config/path_csv/'
-    'rosbag2_2026_03_14-16_23_49.csv'
+    '/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_14-16_23_49.csv'
 )
 
 
