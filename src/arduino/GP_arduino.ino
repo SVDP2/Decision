@@ -1,614 +1,822 @@
 #include <Arduino.h>
-#include "Arduino_LED_Matrix.h"   // LED 매트릭스 라이브러리 포함
-#include "frames.h"               // 사용자 정의 아이콘 헤더
+#include <math.h>
 
-//---------------------- 핀 정의 (Arduino UNO R4 wifi 보드) --------------------//
-// PWM 가능 여부, 인터럽트 가능 핀 등을 GIGA R1 데이터시트 확인 후 배치
-#define motorDirectionPin_Front  11
-#define motorDirectionPin_Rear   9
-#define motorSpeedPin_Front      10
-#define motorSpeedPin_Rear       8
+// ============================================================
+// Longitudinal (drive)
+// ============================================================
+const uint8_t DRIVE_PWM_PIN = 5;   // PWM1
+const uint8_t DRIVE_DIR_PIN = 4;   // DIR1
 
-#define STEERING_DIR_PIN 6   // 예: 방향 제어용
-#define STEERING_PWM_PIN 7   // 예: PWM 출력용
+// throttle 양수인데 후진하면 아래 두 값을 서로 바꾸세요.
+const uint8_t DRIVE_FORWARD_LEVEL = HIGH;
+const uint8_t DRIVE_REVERSE_LEVEL = LOW;
+const unsigned long DRIVE_DIR_CHANGE_DEADTIME_MS = 50;
 
-#define encoderPin_1  2   // 인터럽트 사용 핀
-#define encoderPin_2  3   
+const int MAX_FORWARD_THROTTLE = 200;
+const int MAX_REVERSE_THROTTLE = 50;
 
-#define potentiometerPin_ A2
+// ============================================================
+// Lateral (steering)
+// ============================================================
+const uint8_t POT_PIN = A1;
 
-#define remote_GEAR  A3  // ch3, A3: 조종기 키면 약 1000, 끄면 0 
-#define remote_AILE  A4  // ch1, A4: 조향 채널 (1000 ~ 2000, 1500 중립)
-#define remote_THRO  A5  // ch2, A5: 쓰로틀 채널 (1000 ~ 2000, 1500 중립)
+const uint8_t IN1 = 9;
+const uint8_t IN2 = 10;
+const uint8_t ENA = 2;
 
-// LED 매트릭스 관련 객체
-ArduinoLEDMatrix matrix;
+const int RIGHT_END = 168;
+const int CENTER    = 585;
+const int LEFT_END  = 1003;
 
-// 시리얼 상태 코드 정의
-#define SERIAL_WAITING   0
-#define SERIAL_CONNECTED 1
-#define SERIAL_ERROR     2
+// 왼쪽으로 갈수록 가변저항 ADC 값이 커지면 true
+const bool LEFT_INCREASES_VALUE = true;
 
-#define MANUAL      0
-#define AUTONOMOUS  1
+// ============================================================
+// RC receiver input
+// ============================================================
+// Mega 2560에서 외부 인터럽트 사용: D19(CH1), D18(CH2)
+const uint8_t RC_THROTTLE_PIN = 19;   // CH1 = throttle
+const uint8_t RC_STEER_PIN    = 18;   // CH2 = steering
 
-//---------------------- 전역 변수 --------------------//
-unsigned long last_time = 0;
+// 마지막 유효 펄스 이후 이 시간(us) 동안 갱신이 없으면 stale로 판단
+const unsigned long RC_SIGNAL_STALE_US = 100000;
 
-int MODE = MANUAL;
+// 비정상 pulse 보호용 1차 유효 범위
+const int RC_RAW_VALID_MIN_US = 900;
+const int RC_RAW_VALID_MAX_US = 2100;
 
-int m_aile = 1500;   // ch1, A4: 조향 채널 (1000 ~ 2000, 1500 중립)
-int m_thro = 1500;   // ch2, A5: 쓰로틀 채널 (1000 ~ 2000, 1500 중립)
+// ISR 내부에서 허용할 펄스 범위(약간 여유)
+const int RC_ISR_MIN_US = 800;
+const int RC_ISR_MAX_US = 2200;
 
-// LPF 필터링된 RC 조종기 속도 값을 저장할 변수
-float m_remote_speed_filtered = 0.0; 
-// RC 조종기 속도 LPF 계수 (0.0 ~ 1.0, 작을수록 부드러워짐)
-const float remote_speed_lpf_alpha = 0.2;
+// 실제 제어에 사용할 안전 구간
+const int RC_ACTIVE_MIN_US = 1200;
+const int RC_ACTIVE_MAX_US = 1800;
+const int RC_CENTER_US     = 1500;
 
-float m_remote_speed = 0.0;
-float m_remote_steering_angle = 0.0;
+// 중립 떨림 방지용 데드밴드
+const int RC_THROTTLE_DEADBAND_US = 40;
+const int RC_STEER_DEADBAND_US    = 40;
 
-float m_auto_speed = 0.0;
-float m_auto_steering_angle = 0.0;
+// RC 방향이 반대로 나오면 바꾸세요.
+const bool RC_THROTTLE_HIGH_US_IS_FORWARD = true;
+const bool RC_STEER_HIGH_US_IS_LEFT       = false;
 
-float dt =  0.067; // 제어(루프) 주기 (초 단위, 예: 0.1s)
-int serial_state = SERIAL_WAITING;
+// 수신기 신호가 잠깐 튀는 경우를 막기 위한 유예 시간
+const unsigned long RC_FAILSAFE_DELAY_MS = 150;
 
-//----------- speed -----------//
-// speed = (Δencoder_count / pulses_per_rev) * wheel_circumference / dt;
-const float pulses_per_rev = 15000.0;
-const float wheel_circumference = 0.87699;  // meter
-volatile int m_encoder_count = 0; // 엔코더 카운트
-int speed_encoder_count = 0;
+// ============================================================
+// Control timing / filter
+// ============================================================
+const unsigned long CONTROL_PERIOD_MS = 20;
 
-int speed_encoder_count_prev = 0;
+// 기존보다 가볍게 조정
+const int READ_SAMPLES  = 3;
+const int READ_DELAY_MS = 0;
+const float POSITION_LPF_ALPHA = 0.8f;
 
-float ramped_speed_target = 0.0; // 부드럽게 변화시킬 중간 목표 속도
-const float MAX_ACCELERATION = 1.0; // 최대 가속도 (m/s^2)
-const float MAX_DECELERATION = 1.0; // 최대 감속도 (m/s^2)
-float speed_target = 0.0;
+// 목표값 변화율 제한
+const float MAX_SETPOINT_RATE = 5000.0f;
 
-float speed_raw = 0.0; //lpf 전
-float speed_filtered = 0.0;   // lpf 후
-const float speed_enc_lpf_alpha = 0.143;
+// 도착 판정
+const float TARGET_TOLERANCE = 8.0f;
+const int SETTLE_COUNT_REQUIRED = 4;
+const unsigned long STATUS_PERIOD_MS = 200;
 
-// PID 계수
-const float speed_Kp = 40.0; //75
-const float speed_Ki = 20.0;
-const float speed_Kd = 5.0;
+// PID
+const float POSITION_ERROR_DEADBAND = 4.0f;
+const float STEER_KP = 0.65f;
+const float STEER_KI = 0.015f;
+const float STEER_KD = 0.02f;
+const float STEER_INTEGRAL_LIMIT = 300.0f;
 
-const float speed_error_deadband = 0.01; // 2%
+// PWM 처리
+const float PWM_LPF_ALPHA = 0.8f;
+const float PWM_DEADBAND = 6.0f;
+const float MIN_DRIVE_PWM = 20.0f;
+const float MAX_DRIVE_PWM = 255.0f;
 
-// PID 계산 결과 확인용
-float speed_error = 0.0;
-float speed_derivative = 0.0;
-float speed_integral = 0.0;
-float speed_pid_output = 0.0;
-float previous_speed_error = 0.0;
+// 모터 방향 반전 시 deadtime
+const unsigned long DIR_CHANGE_DEADTIME_MS = 5;
 
+// 미세한 RC steering 변화는 무시
+const int STEER_TARGET_UPDATE_EPS = 2;
 
-// 기존 Kff 값은 가속용으로 사용합니다.
-const float speed_Kff_accel = 60.0; // 예시: 기존에 사용하던 값
-// 감속용 Kff 값은 가속용보다 훨씬 작게 설정합니다.
-const float speed_Kff_decel = 10.0; // 예시: 가속 Kff의 1/3 정도에서 시작
+// ============================================================
+// Longitudinal ramp limit
+// ============================================================
+// PWM 변화 속도 (단위: PWM count / sec)
+const float THROTTLE_ACCEL_RATE = 250.0f;
+const float THROTTLE_DECEL_RATE = 700.0f;
+const float THROTTLE_ZERO_SNAP  = 2.0f;
 
-float speed_ff_output = 0;
-float speed_total_output = 0.0;
+// ============================================================
+// Type / state
+// ============================================================
+enum Direction { DIR_STOP = 0, DIR_LEFT = 1, DIR_RIGHT = -1 };
+Direction lastSteerDir = DIR_STOP;
 
-int speed_is_break = 0;
+struct SteeringState {
+  bool active;
 
-float speed_target_PWM = 0.0;
-float speed_target_PWM_filtered = 0.0;
-const float speed_pwm_lpf_alpha = 1.0;
+  int finalTarget;
 
-const float speed_pwm_deadband = 15.0;
-const float speed_break_mps = 0.12;
+  float filteredPosition;
+  float setpoint;
 
-const float speed_pid_min_pwm_threshold =18.0;  // 정지 마찰 극복 기준
+  float pidIntegral;
+  float previousError;
+  float pwmFiltered;
 
-float speed_target_PWM_compensated = 0.0;
+  int stableCount;
+  Direction lastCommandedDir;
 
+  unsigned long lastControlTime;
+  unsigned long lastStatusTime;
+};
 
-//----------- steering -----------//
-// steering_control.ino 또는 설정 파일 상단
+struct RcState {
+  unsigned long throttlePulse;
+  unsigned long steerPulse;
+  int throttleCmd;
+  int steerTarget;
+  bool signalValid;
+  bool failsafeActive;
+  unsigned long lastValidTime;
+};
 
-// [추가] 목표 조향각의 최대 변화 속도 (단위: 초당 각도, degrees per second)
-// 예: 1초에 최대 180도까지 변할 수 있도록 설정
-float max_steer_velocity = 150.0; 
-float steer_target_angle = 0.0;
+SteeringState steer = {
+  false,
+  CENTER,
+  0.0f, 0.0f,
+  0.0f, 0.0f, 0.0f,
+  0, DIR_STOP,
+  0, 0
+};
 
-int steer_potentiometer_val = 0;
-float steer_raw_angle;
-float steer_filtered_angle = 0.0;
-const float steer_angle_lpf_alpha = 0.8;
+RcState rc = {
+  0, 0,
+  0, CENTER,
+  false, false,
+  0
+};
 
-// PID 계수
-const float steer_Kp = 13;
-const float steer_Ki = 2.5;
-const float steer_Kd = 0.2;
+int currentThrottle = 0;
+int lastDriveSign = 0;
 
-const float steer_error_deadband = 0.2;
+int driveTargetThrottle = 0;
+float driveRampThrottle = 0.0f;
+unsigned long lastDriveRampUpdateMs = 0;
 
-// PID 계산 결과 확인용
-float steer_error = 0.0;
-float steer_integral = 0.0;
-float steer_derivative = 0.0;
-float steer_pid_output = 0.0;
-float steer_previous_error = 0.0;
+// ============================================================
+// RC interrupt storage
+// ============================================================
+volatile uint32_t rcThrottleRiseUs = 0;
+volatile uint32_t rcSteerRiseUs    = 0;
 
-const float steer_pwm_deadband = 10.0;
+volatile uint16_t rcThrottlePulseUs = RC_CENTER_US;
+volatile uint16_t rcSteerPulseUs    = RC_CENTER_US;
 
-float steer_target_PWM = 0.0;
-float steer_target_PWM_filtered = 0.0;
-const float steer_pwm_lpf_alpha = 0.8;
+volatile uint32_t rcThrottleLastUpdateUs = 0;
+volatile uint32_t rcSteerLastUpdateUs    = 0;
 
-const float steer_pid_min_pwm_threshold = 30.0;
+// ============================================================
+// RC ISRs
+// ============================================================
+void isrRcThrottle() {
+  uint32_t now = micros();
 
-float steer_cur_compensation = 0.0;
-float steer_target_PWM_compensated = 0.0;
-
-//------------------- 시리얼 통신 관련 선언 ----------------------// 
-uint8_t compute_crc(const uint8_t *data, size_t len) {
-  uint8_t crc = 0;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= data[i];
-  }
-  return crc;
-}
-#define RX_BUFFER_SIZE 64
-uint8_t rx_buffer[RX_BUFFER_SIZE];  // 수신 버퍼
-uint8_t rx_index = 0;
-
-//---------------------- 인터럽트 핸들러 --------------------//
-void ISR_EncoderA()
-{
-  bool a = digitalRead(encoderPin_1);
-  bool b = digitalRead(encoderPin_2);
-
-    // 회전 방향 판별
-  if (a == b) {
-    m_encoder_count++;  // 정방향
+  if (digitalRead(RC_THROTTLE_PIN) == HIGH) {
+    rcThrottleRiseUs = now;
   } else {
-    m_encoder_count--;  // 역방향
+    uint32_t width = now - rcThrottleRiseUs;
+    if (width >= RC_ISR_MIN_US && width <= RC_ISR_MAX_US) {
+      rcThrottlePulseUs = (uint16_t)width;
+      rcThrottleLastUpdateUs = now;
+    }
   }
 }
 
-//---------------------- 기타 함수 --------------------//
-void speed_control(float target_speed_mps)
-{
-    if (target_speed_mps > ramped_speed_target) {
-      ramped_speed_target += MAX_ACCELERATION * dt;
-      if (ramped_speed_target > target_speed_mps) {
-          ramped_speed_target = target_speed_mps;
-      }
-  } else if (target_speed_mps < ramped_speed_target) {
-      ramped_speed_target -= MAX_DECELERATION * dt;
-      if (ramped_speed_target < target_speed_mps) {
-          ramped_speed_target = target_speed_mps;
-      }
-  }
-  
-  speed_target = constrain(ramped_speed_target, -1.3889, 1.3889);
+void isrRcSteer() {
+  uint32_t now = micros();
 
-  // 1. 엔코더 갱신
-  noInterrupts();  // m_encoder_count 읽기 전에 인터럽트 방지
-  speed_encoder_count = m_encoder_count;
-  m_encoder_count = 0;  // 다음 측정 위해 초기화
+  if (digitalRead(RC_STEER_PIN) == HIGH) {
+    rcSteerRiseUs = now;
+  } else {
+    uint32_t width = now - rcSteerRiseUs;
+    if (width >= RC_ISR_MIN_US && width <= RC_ISR_MAX_US) {
+      rcSteerPulseUs = (uint16_t)width;
+      rcSteerLastUpdateUs = now;
+    }
+  }
+}
+
+// ============================================================
+// Utility
+// ============================================================
+bool getLatestRcPulses(unsigned long &throttlePulse, unsigned long &steerPulse) {
+  uint32_t throttleLast;
+  uint32_t steerLast;
+  uint32_t nowUs = micros();
+
+  noInterrupts();
+  throttlePulse = rcThrottlePulseUs;
+  steerPulse    = rcSteerPulseUs;
+  throttleLast  = rcThrottleLastUpdateUs;
+  steerLast     = rcSteerLastUpdateUs;
   interrupts();
 
-  // 1-2. 스파이크 완화 (엔코더 단)
-  if (abs(speed_encoder_count - speed_encoder_count_prev) > 1500) {
-    speed_encoder_count = 0.8 * speed_encoder_count_prev + 0.2 * speed_encoder_count;
+  bool throttleFresh = (nowUs - throttleLast) <= RC_SIGNAL_STALE_US;
+  bool steerFresh    = (nowUs - steerLast)    <= RC_SIGNAL_STALE_US;
+
+  return throttleFresh && steerFresh;
+}
+
+bool isRcPulseRawValid(unsigned long pulseUs) {
+  return (pulseUs >= RC_RAW_VALID_MIN_US && pulseUs <= RC_RAW_VALID_MAX_US);
+}
+
+long mapClamped(long x, long inMin, long inMax, long outMin, long outMax) {
+  x = constrain(x, inMin, inMax);
+  return map(x, inMin, inMax, outMin, outMax);
+}
+
+int mapRcPulseToThrottle(unsigned long pulseUs) {
+  pulseUs = constrain((int)pulseUs, RC_ACTIVE_MIN_US, RC_ACTIVE_MAX_US);
+
+  const int upperNeutral = RC_CENTER_US + RC_THROTTLE_DEADBAND_US;
+  const int lowerNeutral = RC_CENTER_US - RC_THROTTLE_DEADBAND_US;
+
+  int throttleCmd = 0;
+
+  if (RC_THROTTLE_HIGH_US_IS_FORWARD) {
+    if ((int)pulseUs > upperNeutral) {
+      throttleCmd = (int)mapClamped((long)pulseUs,
+                                    upperNeutral,
+                                    RC_ACTIVE_MAX_US,
+                                    0,
+                                    MAX_FORWARD_THROTTLE);
+    } else if ((int)pulseUs < lowerNeutral) {
+      throttleCmd = (int)mapClamped((long)pulseUs,
+                                    RC_ACTIVE_MIN_US,
+                                    lowerNeutral,
+                                    -MAX_REVERSE_THROTTLE,
+                                    0);
+    }
+  } else {
+    if ((int)pulseUs > upperNeutral) {
+      throttleCmd = (int)mapClamped((long)pulseUs,
+                                    upperNeutral,
+                                    RC_ACTIVE_MAX_US,
+                                    0,
+                                    -MAX_REVERSE_THROTTLE);
+    } else if ((int)pulseUs < lowerNeutral) {
+      throttleCmd = (int)mapClamped((long)pulseUs,
+                                    RC_ACTIVE_MIN_US,
+                                    lowerNeutral,
+                                    MAX_FORWARD_THROTTLE,
+                                    0);
+    }
   }
-  speed_encoder_count_prev = speed_encoder_count;
 
-  // 2. 현재 속도 계산 (m/s)
-  speed_raw = (speed_encoder_count / pulses_per_rev) * wheel_circumference / dt;
-  // speed_raw = (speed_encoder_count / pulses_per_rev) * wheel_circumference;
+  return constrain(throttleCmd, -MAX_REVERSE_THROTTLE, MAX_FORWARD_THROTTLE);
+}
 
-  // 3. speed_raw LPF 적용
-  speed_filtered = speed_enc_lpf_alpha * speed_raw + (1.0 - speed_enc_lpf_alpha) * speed_filtered;
+int mapRcPulseToSteerTarget(unsigned long pulseUs) {
+  pulseUs = constrain((int)pulseUs, RC_ACTIVE_MIN_US, RC_ACTIVE_MAX_US);
 
-  // 4. 현재 속도와 목표 속도 차이
-  speed_error = speed_target - speed_filtered;
+  const int upperNeutral = RC_CENTER_US + RC_STEER_DEADBAND_US;
+  const int lowerNeutral = RC_CENTER_US - RC_STEER_DEADBAND_US;
 
-  // 5. 데드밴드 (속도 오차가 작으면 무시)
-  if (abs(speed_error) < speed_target * speed_error_deadband) {
-    speed_error = 0;
+  if ((int)pulseUs > upperNeutral) {
+    if (RC_STEER_HIGH_US_IS_LEFT) {
+      return (int)mapClamped((long)pulseUs,
+                             upperNeutral,
+                             RC_ACTIVE_MAX_US,
+                             CENTER,
+                             LEFT_END);
+    } else {
+      return (int)mapClamped((long)pulseUs,
+                             upperNeutral,
+                             RC_ACTIVE_MAX_US,
+                             CENTER,
+                             RIGHT_END);
+    }
   }
 
-  // 6. PID 제어
-  speed_integral += speed_error * dt;
-  speed_integral = constrain(speed_integral, -100.0, 100.0);
-  speed_derivative = (speed_error - previous_speed_error) / dt;
-  speed_derivative = constrain(speed_derivative, -100.0, 100.0);
-  speed_pid_output = speed_Kp * speed_error + speed_Ki * speed_integral + speed_Kd * speed_derivative;
-  previous_speed_error = speed_error;
-
-  // 6-2. Feedforward 제어 (속도 비례 항)
-  // 목표 속도가 현재 속도보다 클 때 (가속 시)
-  if (abs(speed_target) > abs(speed_filtered)) {
-    speed_ff_output = speed_target * speed_Kff_accel;
+  if ((int)pulseUs < lowerNeutral) {
+    if (RC_STEER_HIGH_US_IS_LEFT) {
+      return (int)mapClamped((long)pulseUs,
+                             RC_ACTIVE_MIN_US,
+                             lowerNeutral,
+                             RIGHT_END,
+                             CENTER);
+    } else {
+      return (int)mapClamped((long)pulseUs,
+                             RC_ACTIVE_MIN_US,
+                             lowerNeutral,
+                             LEFT_END,
+                             CENTER);
+    }
   }
-  // 목표 속도가 현재 속도보다 작을 때 (감속 시)
+
+  return CENTER;
+}
+
+// ============================================================
+// Longitudinal helpers
+// ============================================================
+void stopDriveMotor() {
+  analogWrite(DRIVE_PWM_PIN, 0);
+  currentThrottle = 0;
+}
+
+void applyDriveThrottle(int throttle) {
+  throttle = constrain(throttle, -MAX_REVERSE_THROTTLE, MAX_FORWARD_THROTTLE);
+
+  if (throttle == 0) {
+    analogWrite(DRIVE_PWM_PIN, 0);
+    currentThrottle = 0;
+    return;
+  }
+
+  int newSign = (throttle > 0) ? 1 : -1;
+  uint8_t dirLevel = (throttle > 0) ? DRIVE_FORWARD_LEVEL : DRIVE_REVERSE_LEVEL;
+  int pwm = abs(throttle);
+
+  if (lastDriveSign != 0 && lastDriveSign != newSign) {
+    analogWrite(DRIVE_PWM_PIN, 0);
+    delay(DRIVE_DIR_CHANGE_DEADTIME_MS);
+  }
+
+  digitalWrite(DRIVE_DIR_PIN, dirLevel);
+  analogWrite(DRIVE_PWM_PIN, pwm);
+
+  currentThrottle = throttle;
+  lastDriveSign = newSign;
+}
+
+void updateDriveThrottleRamp() {
+  unsigned long now = millis();
+
+  if (lastDriveRampUpdateMs == 0) {
+    lastDriveRampUpdateMs = now;
+    return;
+  }
+
+  float dt = (now - lastDriveRampUpdateMs) * 0.001f;
+  lastDriveRampUpdateMs = now;
+
+  if (dt <= 0.0001f) {
+    return;
+  }
+
+  float current = driveRampThrottle;
+  float target  = constrain((float)driveTargetThrottle,
+                            -(float)MAX_REVERSE_THROTTLE,
+                            (float)MAX_FORWARD_THROTTLE);
+  float diff    = target - current;
+
+  if (fabs(diff) <= 0.5f) {
+    driveRampThrottle = target;
+    applyDriveThrottle((int)driveRampThrottle);
+    return;
+  }
+
+  bool signChanged =
+      ((current > 0.0f) && (target < 0.0f)) ||
+      ((current < 0.0f) && (target > 0.0f));
+
+  bool magnitudeIncreasingSameDirection =
+      (!signChanged) && (fabs(target) > fabs(current));
+
+  float rate = magnitudeIncreasingSameDirection ? THROTTLE_ACCEL_RATE
+                                                : THROTTLE_DECEL_RATE;
+
+  float maxStep = rate * dt;
+
+  if (diff > maxStep) {
+    current += maxStep;
+  } else if (diff < -maxStep) {
+    current -= maxStep;
+  } else {
+    current = target;
+  }
+
+  // 방향 반전 시 반드시 0을 한 번 거치게 함
+  if ((driveRampThrottle > 0.0f && current < 0.0f) ||
+      (driveRampThrottle < 0.0f && current > 0.0f)) {
+    current = 0.0f;
+  }
+
+  // 0 근처 떨림 제거
+  if (fabs(current) <= THROTTLE_ZERO_SNAP &&
+      fabs(target) <= THROTTLE_ZERO_SNAP) {
+    current = 0.0f;
+  }
+
+  driveRampThrottle = constrain(current,
+                                -(float)MAX_REVERSE_THROTTLE,
+                                (float)MAX_FORWARD_THROTTLE);
+  applyDriveThrottle((int)driveRampThrottle);
+}
+
+// ============================================================
+// Steering helpers
+// ============================================================
+void stopSteerMotor() {
+  analogWrite(ENA, 0);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  lastSteerDir = DIR_STOP;
+}
+
+void applySteerMotor(Direction dir, int pwm) {
+  pwm = constrain(pwm, 0, 255);
+
+  if (dir == DIR_LEFT) {
+    if (lastSteerDir == DIR_RIGHT) {
+      stopSteerMotor();
+      delay(DIR_CHANGE_DEADTIME_MS);
+    }
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    analogWrite(ENA, pwm);
+    lastSteerDir = DIR_LEFT;
+  }
+  else if (dir == DIR_RIGHT) {
+    if (lastSteerDir == DIR_LEFT) {
+      stopSteerMotor();
+      delay(DIR_CHANGE_DEADTIME_MS);
+    }
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    analogWrite(ENA, pwm);
+    lastSteerDir = DIR_RIGHT;
+  }
   else {
-    speed_ff_output = speed_target * speed_Kff_decel;
+    stopSteerMotor();
+  }
+}
+
+int readSteeringValue() {
+  long sum = 0;
+  for (int i = 0; i < READ_SAMPLES; i++) {
+    sum += analogRead(POT_PIN);
+    if (READ_DELAY_MS > 0) {
+      delay(READ_DELAY_MS);
+    }
+  }
+  return (int)(sum / READ_SAMPLES);
+}
+
+Direction commandToDirection(float signedCommand) {
+  if (signedCommand > 0.0f) {
+    return LEFT_INCREASES_VALUE ? DIR_LEFT : DIR_RIGHT;
+  }
+  else if (signedCommand < 0.0f) {
+    return LEFT_INCREASES_VALUE ? DIR_RIGHT : DIR_LEFT;
+  }
+  return DIR_STOP;
+}
+
+void printControlStatus(float finalError, float appliedPwm, Direction dir) {
+  Serial.print("RC CH1: ");
+  Serial.print(rc.throttlePulse);
+  Serial.print(" us -> CmdTHR: ");
+  Serial.print(rc.throttleCmd);
+  Serial.print(" | OutTHR: ");
+  Serial.print(currentThrottle);
+  Serial.print(" | RC CH2: ");
+  Serial.print(rc.steerPulse);
+  Serial.print(" us -> Target: ");
+  Serial.print(rc.steerTarget);
+  Serial.print(" | Cur: ");
+  Serial.print(steer.filteredPosition, 1);
+  Serial.print(" | Err: ");
+  Serial.print(finalError, 1);
+  Serial.print(" | PWM: ");
+  Serial.print(appliedPwm, 1);
+  Serial.print(" | Dir: ");
+
+  if (dir == DIR_LEFT) Serial.println("L");
+  else if (dir == DIR_RIGHT) Serial.println("R");
+  else Serial.println("STOP");
+}
+
+void enterRcFailsafe(const char *reason) {
+  driveTargetThrottle = 0;
+  driveRampThrottle = 0.0f;
+  lastDriveRampUpdateMs = millis();
+
+  stopDriveMotor();
+  stopSteerMotor();
+  steer.active = false;
+
+  if (!rc.failsafeActive) {
+    Serial.print("RC FAILSAFE: ");
+    Serial.println(reason);
   }
 
-  // 6-3. PID + Feedforward 합산 출력
-  speed_total_output = speed_pid_output + speed_ff_output;
+  rc.failsafeActive = true;
+  rc.signalValid = false;
+  rc.throttleCmd = 0;
+  rc.steerTarget = CENTER;
+}
 
-  // 7. PWM 제한 및 로우패스 필터 적용
-  speed_target_PWM = abs(speed_total_output);
-  speed_target_PWM_filtered = speed_pwm_lpf_alpha * speed_target_PWM + (1.0 - speed_pwm_lpf_alpha) * speed_target_PWM_filtered;
+void startSteeringControl(int target) {
+  target = constrain(target, RIGHT_END, LEFT_END);
 
-  // 8. pwm이 0 근처 범위안으로 들어오면 모터드라이브 브레이크
-  if ((speed_target_PWM_filtered < speed_pwm_deadband || abs(speed_filtered) < speed_break_mps) & (abs(speed_target) < 0.01)) { 
-    digitalWrite(motorDirectionPin_Front, HIGH);
-    digitalWrite(motorDirectionPin_Rear, HIGH);
-    analogWrite(motorSpeedPin_Front, 0);
-    analogWrite(motorSpeedPin_Rear, 0);
-    speed_target_PWM_compensated = 0.0;
-    speed_is_break = 1;
+  float currentRaw = (float)readSteeringValue();
+
+  steer.active = true;
+  steer.finalTarget = target;
+  steer.filteredPosition = currentRaw;
+  steer.setpoint = currentRaw;
+
+  steer.pidIntegral = 0.0f;
+  steer.previousError = 0.0f;
+  steer.pwmFiltered = 0.0f;
+
+  steer.stableCount = 0;
+  steer.lastCommandedDir = DIR_STOP;
+
+  steer.lastControlTime = millis();
+  steer.lastStatusTime = 0;
+
+  stopSteerMotor();
+
+  Serial.print("조향 제어 시작 / 목표: ");
+  Serial.println(steer.finalTarget);
+}
+
+void setSteeringTargetContinuous(int target) {
+  target = constrain(target, RIGHT_END, LEFT_END);
+
+  if (!steer.active) {
+    startSteeringControl(target);
+    return;
+  }
+
+  if (abs(target - steer.finalTarget) >= STEER_TARGET_UPDATE_EPS) {
+    steer.finalTarget = target;
+    steer.stableCount = 0;
+  }
+}
+
+void updateSteeringControl() {
+  if (!steer.active) {
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - steer.lastControlTime < CONTROL_PERIOD_MS) {
+    return;
+  }
+
+  float dt = (now - steer.lastControlTime) * 0.001f;
+  steer.lastControlTime = now;
+
+  if (dt <= 0.0001f) {
+    return;
+  }
+
+  float currentRaw = (float)readSteeringValue();
+  steer.filteredPosition = POSITION_LPF_ALPHA * currentRaw +
+                           (1.0f - POSITION_LPF_ALPHA) * steer.filteredPosition;
+
+  float finalError = steer.finalTarget - steer.filteredPosition;
+
+  float setpointDiff = steer.finalTarget - steer.setpoint;
+  float maxStep = MAX_SETPOINT_RATE * dt;
+  setpointDiff = constrain(setpointDiff, -maxStep, maxStep);
+  steer.setpoint += setpointDiff;
+  steer.setpoint = constrain(steer.setpoint, (float)RIGHT_END, (float)LEFT_END);
+
+  if (fabs(finalError) <= TARGET_TOLERANCE) {
+    stopSteerMotor();
+    steer.pwmFiltered = 0.0f;
+    steer.pidIntegral = 0.0f;
+    steer.previousError = 0.0f;
+    steer.lastCommandedDir = DIR_STOP;
+
+    if (steer.stableCount < SETTLE_COUNT_REQUIRED) {
+      steer.stableCount++;
+    }
+
+    if (now - steer.lastStatusTime >= STATUS_PERIOD_MS) {
+      printControlStatus(finalError, 0.0f, DIR_STOP);
+      steer.lastStatusTime = now;
+    }
+    return;
+  }
+
+  steer.stableCount = 0;
+
+  float controlError = steer.setpoint - steer.filteredPosition;
+
+  if (fabs(controlError) < POSITION_ERROR_DEADBAND) {
+    controlError = 0.0f;
+  }
+
+  float derivative = (controlError - steer.previousError) / dt;
+
+  float candidateIntegral = steer.pidIntegral + controlError * dt;
+  candidateIntegral = constrain(candidateIntegral,
+                                -STEER_INTEGRAL_LIMIT,
+                                STEER_INTEGRAL_LIMIT);
+
+  float tentativeOutput = STEER_KP * controlError +
+                          STEER_KI * candidateIntegral +
+                          STEER_KD * derivative;
+
+  bool saturatingHigh = (tentativeOutput >  MAX_DRIVE_PWM && controlError > 0.0f);
+  bool saturatingLow  = (tentativeOutput < -MAX_DRIVE_PWM && controlError < 0.0f);
+
+  if (!(saturatingHigh || saturatingLow)) {
+    steer.pidIntegral = candidateIntegral;
+  }
+
+  float pidOutput = STEER_KP * controlError +
+                    STEER_KI * steer.pidIntegral +
+                    STEER_KD * derivative;
+
+  pidOutput = constrain(pidOutput, -MAX_DRIVE_PWM, MAX_DRIVE_PWM);
+  steer.previousError = controlError;
+
+  float targetPwm = fabs(pidOutput);
+  steer.pwmFiltered = PWM_LPF_ALPHA * targetPwm +
+                      (1.0f - PWM_LPF_ALPHA) * steer.pwmFiltered;
+
+  float compensatedPwm = 0.0f;
+  Direction cmdDir = DIR_STOP;
+
+  if (steer.pwmFiltered <= PWM_DEADBAND) {
+    stopSteerMotor();
+    compensatedPwm = 0.0f;
+    cmdDir = DIR_STOP;
   } else {
-    speed_is_break = 0;
-    
-    // 9. 최소 출력 보상 (Stiction Compensation)
-    float calculated_pwm = speed_target_PWM_filtered;
+    compensatedPwm = steer.pwmFiltered;
 
-    // 계산된 PWM이 0보다 크지만, 모터를 움직이기엔 부족한 '최소 구동 기준치'보다 작을 경우
-    if (calculated_pwm > 0 && calculated_pwm < speed_pid_min_pwm_threshold) {
-      // 출력을 '최소 구동 기준치' 값으로 강제로 설정하여 정지 마찰을 극복합니다.
-      speed_target_PWM_compensated = speed_pid_min_pwm_threshold;
-    } else {
-      // 0이거나 기준치보다 클 경우에는 계산된 값을 그대로 사용합니다.
-      speed_target_PWM_compensated = calculated_pwm;
+    if (compensatedPwm < MIN_DRIVE_PWM) {
+      compensatedPwm = MIN_DRIVE_PWM;
     }
-    
-    speed_target_PWM_compensated = constrain(speed_target_PWM_compensated, 0, 255);
 
-    // 10. 방향 및 PWM 출력
-    if (speed_total_output > 0) { // Forward
-      digitalWrite(motorDirectionPin_Front, LOW);
-      digitalWrite(motorDirectionPin_Rear, LOW);
-    } else {               // Backward
-      digitalWrite(motorDirectionPin_Front, HIGH);
-      digitalWrite(motorDirectionPin_Rear, HIGH);
-    }
-    analogWrite(motorSpeedPin_Front, (int)speed_target_PWM_compensated);
-    analogWrite(motorSpeedPin_Rear, (int)speed_target_PWM_compensated);
+    compensatedPwm = constrain(compensatedPwm, 0.0f, MAX_DRIVE_PWM);
+    cmdDir = commandToDirection(pidOutput);
+    applySteerMotor(cmdDir, (int)compensatedPwm);
+  }
+
+  steer.lastCommandedDir = cmdDir;
+
+  if (now - steer.lastStatusTime >= STATUS_PERIOD_MS) {
+    printControlStatus(finalError, compensatedPwm, cmdDir);
+    steer.lastStatusTime = now;
   }
 }
 
-void steering_control(float steering_angle)
-{
-  // 1. 이번 루프에서 허용되는 최대 각도 변화량을 계산합니다.
-  float max_angle_change_per_loop = max_steer_velocity * dt;
+// ============================================================
+// RC update
+// ============================================================
+void updateRcControl() {
+  unsigned long throttlePulse = 0;
+  unsigned long steerPulse    = 0;
+  bool fresh = getLatestRcPulses(throttlePulse, steerPulse);
+  unsigned long now = millis();
 
-  // 2. 최종 목표(steering_angle)와 현재 목표(steer_target_angle)의 차이를 계산합니다.
-  float angle_diff = steering_angle - steer_target_angle;
+  rc.throttlePulse = throttlePulse;
+  rc.steerPulse    = steerPulse;
 
-  // 3. 차이 값을 최대 변화량 이내로 제한(clamping)합니다.
-  float clamped_diff = constrain(angle_diff, -max_angle_change_per_loop, max_angle_change_per_loop);
+  bool valid = fresh &&
+               isRcPulseRawValid(throttlePulse) &&
+               isRcPulseRawValid(steerPulse);
+  rc.signalValid = valid;
 
-  // 4. 제한된 변화량을 현재 목표에 더하여, 새로운 목표 각도를 업데이트합니다.
-  steer_target_angle += clamped_diff;
-  
-  // 1-1. 목표 각도의 범위를 -20 ~ +20도로 제한합니다. (이 로직은 그대로 유지)
-  steer_target_angle = constrain(steer_target_angle, -20.0, 20.0);
+  if (valid) {
+    rc.lastValidTime = now;
+    rc.throttleCmd = mapRcPulseToThrottle(throttlePulse);
+    rc.steerTarget = mapRcPulseToSteerTarget(steerPulse);
 
-  // 2. 현재 포텐쇼미터 값 읽기 100(우) ~ 1000(좌)값이 나옴..
-  steer_potentiometer_val = analogRead(potentiometerPin_);
-  if (steer_potentiometer_val >= 512) {
-    // 좌회전 (0° ~ +20.96°) // (20.96°-0°)/(978-512) = 0.04508
-    steer_raw_angle = (steer_potentiometer_val - 512) * 0.04313;
-  } else {
-    // 우회전 (0° ~ -22.33°) // (0°-(-22.33°)/(512-82) = 0.05193
-    steer_raw_angle = (steer_potentiometer_val - 512) * 0.04313;
+    if (rc.failsafeActive) {
+      Serial.println("RC signal recovered");
+      rc.failsafeActive = false;
+    }
+
+    driveTargetThrottle = rc.throttleCmd;
+    setSteeringTargetContinuous(rc.steerTarget);
+    return;
   }
 
-  // 3. steer_raw_angle에 Low-pass filter 적용
-  steer_filtered_angle = steer_angle_lpf_alpha * steer_raw_angle + (1.0 - steer_angle_lpf_alpha) * steer_filtered_angle;
-
-  // 4. 오차 계산 (목표 - 현재)
-  steer_error = steer_target_angle - steer_filtered_angle;
-
-  // 5. 데드밴드 설정
-  if (abs(steer_error) < steer_error_deadband) {
-    steer_error = 0.0;
-  }
-
-  // 6. PID 계산
-  steer_integral += steer_error * dt;
-  steer_integral = constrain(steer_integral, -100.0, 100.0);
-  steer_derivative = (steer_error - steer_previous_error) / dt;
-  steer_derivative = constrain(steer_derivative, -100.0, 100.0);
-  steer_pid_output = steer_Kp * steer_error + steer_Ki * steer_integral + steer_Kd * steer_derivative;  
-  steer_previous_error = steer_error;
-
-  // 7. PWM 변환, LPF, 제한
-  steer_target_PWM = abs(steer_pid_output);
-  steer_target_PWM_filtered = steer_pwm_lpf_alpha * steer_target_PWM + (1.0 - steer_pwm_lpf_alpha) * steer_target_PWM_filtered;
-
-  // 8. pwm이 0 근처 범위안으로 들어오면 물리적 브레이크
-  if (steer_target_PWM_filtered <= steer_pwm_deadband){
-    digitalWrite(STEERING_DIR_PIN, HIGH);
-    analogWrite(STEERING_PWM_PIN, 0);
-    steer_target_PWM_compensated = 0.0;
-    steer_target_PWM_filtered = 0.0;
-    steer_cur_compensation = 0.0;
-  } else {
-    // 9. 최소 구동 보상 (정지 극복용 오프셋)
-    steer_target_PWM_compensated = steer_target_PWM_filtered; // 우선 필터링된 값을 할당
-    if (steer_target_PWM_compensated < steer_pid_min_pwm_threshold) {
-      steer_target_PWM_compensated = steer_pid_min_pwm_threshold; // 최소값보다 작으면, 최소값으로 강제 설정
-    }
-    steer_target_PWM_compensated = constrain(steer_target_PWM_compensated, 0, 255);
-
-    //10. 방향 및 출력
-    if (steer_pid_output > 0) {
-      digitalWrite(STEERING_DIR_PIN, LOW);
-    } else {
-      digitalWrite(STEERING_DIR_PIN, HIGH);
-    }
-    analogWrite(STEERING_PWM_PIN, (int)steer_target_PWM_compensated);
+  if (now - rc.lastValidTime >= RC_FAILSAFE_DELAY_MS) {
+    enterRcFailsafe("signal lost or stale pulse");
   }
 }
 
-void remoteController() {
-  // 채널 값 읽기 (A3, A4, A5)
-  m_thro = pulseIn(remote_THRO, HIGH, 25000);
-  m_aile = pulseIn(remote_AILE, HIGH, 25000);
-
-  if (m_aile > 500) {
-    MODE = MANUAL;
-
-    // --- 1. 요청대로, 스로틀과 조향 모두 유효 범위를 1000 ~ 1900으로 제한합니다. ---
-    long clamped_thro = constrain(m_thro, 1000, 2000);
-    long clamped_aile = constrain(m_aile, 1000, 2000);
-
-    // --- 2. 새로운 1000~2000 범위를 사용하여 속도를 매핑합니다. ---
-    // fromLow는 1000.0, fromHigh는 2000.0으로 변경되었습니다.
-    m_remote_speed = (clamped_thro - 1000.0) * (1.3889 - (-1.3889)) / (2000.0 - 1000.0) + (-1.3889);
-    
-    // 스로틀 중앙 데드밴드
-    if (-1.3889 * 0.15 < m_remote_speed && m_remote_speed < 1.3889 * 0.15)
-      m_remote_speed = 0.0;
-
-    // --- 3. 조향에도 동일한 1000~2000 범위를 사용하여 매핑합니다. ---
-    m_remote_steering_angle = (clamped_aile - 1000.0) * (-20.0 - 20.0) / (2000.0 - 1000.0) + 20.0;
-    
-    // 조향 중앙 데드밴드
-    if (-10.0 < m_remote_steering_angle && m_remote_steering_angle < 10.0)
-      m_remote_steering_angle = 0.0;
-
-      if (m_remote_speed > 0.9){ 
-      m_remote_speed = 1.3889;
-      }
-      
-    // 속도 LPF 로직
-    m_remote_speed_filtered = remote_speed_lpf_alpha * m_remote_speed + (1.0 - remote_speed_lpf_alpha) * m_remote_speed_filtered;
-
-  } else {
-    MODE = AUTONOMOUS;
-    m_remote_speed = 0;
-    m_remote_speed_filtered = 0; 
-    m_remote_steering_angle = 0;
-  }
+void printCurrentStatus() {
+  Serial.println();
+  Serial.println("===== 현재 상태 =====");
+  Serial.print("RC CH1(us)    : ");
+  Serial.println(rc.throttlePulse);
+  Serial.print("RC CH2(us)    : ");
+  Serial.println(rc.steerPulse);
+  Serial.print("Throttle Cmd  : ");
+  Serial.println(rc.throttleCmd);
+  Serial.print("Throttle Out  : ");
+  Serial.println(currentThrottle);
+  Serial.print("Steer Target  : ");
+  Serial.println(rc.steerTarget);
+  Serial.print("Steer ADC     : ");
+  Serial.println(readSteeringValue());
+  Serial.print("Steer Active  : ");
+  Serial.println(steer.active ? "YES" : "NO");
+  Serial.print("RC Valid      : ");
+  Serial.println(rc.signalValid ? "YES" : "NO");
+  Serial.print("RC Failsafe   : ");
+  Serial.println(rc.failsafeActive ? "YES" : "NO");
+  Serial.println("====================");
+  Serial.println();
 }
 
-void updateMatrix(uint8_t mode, uint8_t serial_state) {
-  if (mode == 0) {  // 수동 모드
-    switch (serial_state) {
-      case SERIAL_WAITING:
-        matrix.loadFrame(manual_SerialWaiting);
-        break;
-      case SERIAL_CONNECTED:
-        matrix.loadFrame(manual_SerialConnected);
-        break;
-      case SERIAL_ERROR:
-        matrix.loadFrame(manual_SerialError);
-        break;
-    }
-  } else if (mode == 1) {  // 자율주행 모드
-    switch (serial_state) {
-      case SERIAL_WAITING:
-        matrix.loadFrame(automonous_SerialWaiting);
-        break;
-      case SERIAL_CONNECTED:
-        matrix.loadFrame(automonous_SerialConnected);
-        break;
-      case SERIAL_ERROR:
-        matrix.loadFrame(automonous_SerialError);
-        break;
-    }
-  }
+void printHelp() {
+  Serial.println();
+  Serial.println("===== T870 RC Integrated Controller =====");
+  Serial.print("RC throttle pin : ");
+  Serial.println(RC_THROTTLE_PIN);
+  Serial.print("RC steer pin    : ");
+  Serial.println(RC_STEER_PIN);
+  Serial.print("RC active range : ");
+  Serial.print(RC_ACTIVE_MIN_US);
+  Serial.print(" ~ ");
+  Serial.println(RC_ACTIVE_MAX_US);
+  Serial.print("RC neutral      : ");
+  Serial.println(RC_CENTER_US);
+  Serial.print("Throttle deadband(us) : ");
+  Serial.println(RC_THROTTLE_DEADBAND_US);
+  Serial.print("Steer deadband(us)    : ");
+  Serial.println(RC_STEER_DEADBAND_US);
+  Serial.print("Throttle accel rate   : ");
+  Serial.println(THROTTLE_ACCEL_RATE);
+  Serial.print("Throttle decel rate   : ");
+  Serial.println(THROTTLE_DECEL_RATE);
+  Serial.print("Forward max throttle  : ");
+  Serial.println(MAX_FORWARD_THROTTLE);
+  Serial.print("Reverse max throttle  : ");
+  Serial.println(-MAX_REVERSE_THROTTLE);
+  Serial.print("Steering ADC range    : ");
+  Serial.print(RIGHT_END);
+  Serial.print(" ~ ");
+  Serial.println(LEFT_END);
+  Serial.println("참고:");
+  Serial.println("  1) RC 입력선은 Mega 인터럽트 핀으로 옮기세요. CH1 -> D19, CH2 -> D18");
+  Serial.println("  2) throttle 방향이 반대면 RC_THROTTLE_HIGH_US_IS_FORWARD 값을 바꾸세요.");
+  Serial.println("  3) steering 방향이 반대면 RC_STEER_HIGH_US_IS_LEFT 값을 바꾸세요.");
+  Serial.println("  4) neutral에서 떨리면 deadband를 더 키우세요.");
+  Serial.println("=========================================");
+  Serial.println();
 }
 
-void handleSerialReceive() {
-
-  if (Serial.available() == 0) {
-  serial_state = SERIAL_WAITING;
-  return;
-  }
-
-  // 시리얼 수신 버퍼 채우기
-  while (Serial.available() > 0 && rx_index < RX_BUFFER_SIZE) {
-    rx_buffer[rx_index++] = Serial.read();
-  }
-
-  // 최소 패킷 단위 존재 여부 확인
-  while (rx_index >= 11) {
-    // 버퍼 넘쳤는지 확인
-    if (rx_index >= RX_BUFFER_SIZE) {
-      rx_index = 0;
-      serial_state = SERIAL_ERROR;
-    }
-
-    // 헤더 탐색
-    int header_index = -1;
-    for (int i = 0; i <= rx_index - 2; i++) {
-      if (rx_buffer[i] == 0xAA && rx_buffer[i + 1] == 0x55) {
-        header_index = i;
-        break;
-      }
-    }
-
-    if (header_index == -1) {
-      rx_index = 0;
-      serial_state = SERIAL_ERROR;
-      break;
-    }
-
-    if (header_index > 0) {
-      for (int i = 0; i < rx_index - header_index; i++) {
-        rx_buffer[i] = rx_buffer[i + header_index];
-      }
-      rx_index -= header_index;
-    }
-
-    if (rx_index < 11) break;
-
-    uint8_t crc_received = rx_buffer[10];
-    uint8_t crc_calculated = compute_crc(&rx_buffer[2], 8);
-
-    if (crc_received != crc_calculated) {
-      for (int i = 0; i < rx_index - 1; i++) {
-        rx_buffer[i] = rx_buffer[i + 1];
-      }
-      rx_index -= 1;
-      serial_state = SERIAL_ERROR;
-      continue;
-    }
-
-    memcpy(&m_auto_speed, &rx_buffer[2], 4);
-    memcpy(&m_auto_steering_angle, &rx_buffer[6], 4);
-    serial_state = SERIAL_CONNECTED;
-
-    for (int i = 0; i < rx_index - 11; i++) {
-      rx_buffer[i] = rx_buffer[i + 11];
-    }
-    rx_index -= 11;
-  }
-}
-
-void sendSerialTelemetry() {
-    uint8_t packet[31];
-    uint8_t offset = 0;
-  
-    packet[offset++] = 0xAA;
-    packet[offset++] = 0x55;
-    memcpy(&packet[offset], &steer_filtered_angle, 4);         offset += 4;
-    memcpy(&packet[offset], &steer_target_PWM_compensated, 4); offset += 4;    
-    memcpy(&packet[offset], &speed_filtered, 4);               offset += 4;
-    memcpy(&packet[offset], &speed_target_PWM_compensated, 4); offset += 4;
-    memcpy(&packet[offset], &m_auto_speed, 4);                 offset += 4;
-    memcpy(&packet[offset], &m_auto_steering_angle, 4);        offset += 4;
-    memcpy(&packet[offset], &last_time, 4);                    offset += 4;
-    packet[offset++]  = compute_crc(&packet[2], offset - 2);
-  
-    Serial.write(packet, offset);
-  }
-
-// 기존 printDebugInfo() 함수를 아래와 같이 수정하거나 새로 만들어 사용하세요.
-void printDebugInfo() {
-  // --- 기존 속도 데이터 (8개) ---
-  Serial.print(speed_filtered, 4); Serial.print(",");
-  Serial.print(speed_target, 4); Serial.print(",");
-  Serial.print(speed_pid_output, 4); Serial.print(",");
-  Serial.print(speed_ff_output, 4); Serial.print(",");
-  Serial.print(speed_total_output, 4); Serial.print(",");
-  Serial.print(speed_is_break); Serial.print(",");
-  Serial.print(speed_target_PWM_filtered, 4); Serial.print(",");
-  Serial.print(speed_target_PWM_compensated, 4); Serial.print(","); // 마지막에 쉼표 추가
-
-  // --- 추가될 조향 데이터 (12개) ---
-  Serial.print(steer_potentiometer_val); Serial.print(",");
-  Serial.print(steer_raw_angle, 4); Serial.print(",");
-  Serial.print(steer_filtered_angle, 4); Serial.print(",");
-  Serial.print(steer_target_angle, 4); Serial.print(",");
-  Serial.print(steer_error, 4); Serial.print(",");
-  Serial.print(steer_integral, 4); Serial.print(",");
-  Serial.print(steer_derivative, 4); Serial.print(",");
-  Serial.print(steer_pid_output, 4); Serial.print(",");
-  Serial.print(steer_target_PWM, 4); Serial.print(",");
-  Serial.print(steer_target_PWM_filtered, 4); Serial.print(",");
-  Serial.print(steer_cur_compensation, 4); Serial.print(",");
-  Serial.println(steer_target_PWM_compensated, 4); // 마지막은 println
-}
-
-
-//---------------------- 하드웨어 초기화 --------------------//
+// ============================================================
+// Arduino entry
+// ============================================================
 void setup() {
+  pinMode(DRIVE_PWM_PIN, OUTPUT);
+  pinMode(DRIVE_DIR_PIN, OUTPUT);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+
+  pinMode(RC_THROTTLE_PIN, INPUT);
+  pinMode(RC_STEER_PIN, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(RC_THROTTLE_PIN), isrRcThrottle, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(RC_STEER_PIN), isrRcSteer, CHANGE);
+
   Serial.begin(115200);
-  matrix.begin();
-  delay(1000);
 
+  stopDriveMotor();
+  stopSteerMotor();
+  digitalWrite(DRIVE_DIR_PIN, DRIVE_FORWARD_LEVEL);
 
-  const char* CSV_HEADER = "speed_filtered,speed_target,speed_pid_output,speed_ff_output,speed_total_output,speed_is_break,speed_target_PWM_filtered,speed_target_PWM_compensated";
+  delay(300);
 
-  // 시리얼 포트가 준비될 때까지 잠시 대기
-  while (!Serial);
+  // 초기 stale 판단 방지
+  noInterrupts();
+  uint32_t nowUs = micros();
+  rcThrottleLastUpdateUs = nowUs;
+  rcSteerLastUpdateUs = nowUs;
+  interrupts();
 
-  Serial.println(CSV_HEADER); // 파이썬에서 사용할 헤더 출력
+  driveTargetThrottle = 0;
+  driveRampThrottle = 0.0f;
+  lastDriveRampUpdateMs = millis();
 
-  // 핀모드 설정
-  pinMode(motorDirectionPin_Front, OUTPUT);
-  pinMode(motorDirectionPin_Rear,  OUTPUT);
-  pinMode(motorSpeedPin_Front,    OUTPUT);
-  pinMode(motorSpeedPin_Rear,     OUTPUT);
-
-  pinMode(STEERING_DIR_PIN, OUTPUT);
-  pinMode(STEERING_PWM_PIN, OUTPUT);
-
-  pinMode(encoderPin_1, INPUT_PULLUP);
-  pinMode(encoderPin_2, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(encoderPin_1), ISR_EncoderA, CHANGE);
-
-  pinMode(potentiometerPin_, INPUT);
-
-  // pinMode(remote_GEAR, INPUT);
-  pinMode(remote_AILE, INPUT);
-  pinMode(remote_THRO, INPUT);
-
-  // 초기 구동 설정
-  digitalWrite(motorDirectionPin_Front, LOW);
-  digitalWrite(motorDirectionPin_Rear,  LOW);
-  digitalWrite(STEERING_DIR_PIN,  LOW);
-
-  matrix.loadFrame(FRAME_HAPPY);    // 초기 프레임 출력
-
-  delay(1000);
+  printHelp();
+  printCurrentStatus();
 }
 
-//---------------------- 메인 루프 --------------------//
-void loop() {  
-  if (millis() - last_time >= dt*1000) {  // 100ms 주기
-    last_time = millis();
-
-    // // ===== 1. PC ← Arduino: 31바이트 패킷 전송 =====
-    // sendSerialTelemetry();  // 상태 전송
-
-    // // ===== 2. PC → Arduino: 11바이트 패킷 수신 =====
-    // handleSerialReceive();  // 수신 처리
-
-    // ===== 3. 디버깅용 출력 =====
-    printDebugInfo();
-
-    // ===== 4. 조종기  =====
-    remoteController(); // RC 리모컨 값 읽기
-
-    // ===== 5. 제어 =====
-    if(MODE == AUTONOMOUS) {  // AUTONOMOUS
-      speed_control(0.5);
-      steering_control(m_auto_steering_angle);
-    } else {          // MANUAL
-      speed_control(m_remote_speed_filtered);
-      steering_control(m_remote_steering_angle);
-    }
-
-    // ===== 6. LED update =====
-    updateMatrix(MODE, serial_state);
-  }
+void loop() {
+  updateRcControl();
+  updateDriveThrottleRamp();
+  updateSteeringControl();
 }
