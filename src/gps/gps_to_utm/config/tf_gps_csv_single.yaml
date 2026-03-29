@@ -7,4 +7,4 @@ tf_gps_csv_single_node:
     csv_frame_id: "csv"
     vehicle_frame_id: "vehicle_ref"
     path_publish_rate_hz: 10.0
-    publish_tf_only_when_heading_valid: true
+    publish_tf_only_when_heading_valid: false

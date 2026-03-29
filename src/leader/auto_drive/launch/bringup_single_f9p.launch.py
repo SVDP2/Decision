@@ -11,16 +11,26 @@ from launch_ros.actions import Node
 
 
 DEFAULT_CSV_PATH = (
-    '/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_14-16_23_49.csv'
+    '/Users/yoosm/FinalProject/GP_Decision/config/path_csv/'
+    'rosbag2_2026_03_14-16_23_49.csv'
 )
 
 
 def generate_launch_description():
     auto_drive_share_dir = get_package_share_directory('auto_drive')
     gps_to_utm_share_dir = get_package_share_directory('gps_to_utm')
+    default_rviz_config = os.path.join(
+        auto_drive_share_dir, 'config', 'single_f9p_debug.rviz'
+    )
 
     csv_file_arg = DeclareLaunchArgument(
         'csv_file_path', default_value=DEFAULT_CSV_PATH
+    )
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz', default_value='true'
+    )
+    rviz_config_arg = DeclareLaunchArgument(
+        'rviz_config', default_value=default_rviz_config
     )
     use_serial_bridge_arg = DeclareLaunchArgument(
         'use_serial_bridge', default_value='false'
@@ -72,14 +82,26 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_serial_bridge')),
     )
 
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', LaunchConfiguration('rviz_config')],
+        condition=IfCondition(LaunchConfiguration('use_rviz')),
+    )
+
     return LaunchDescription(
         [
             csv_file_arg,
+            use_rviz_arg,
+            rviz_config_arg,
             use_serial_bridge_arg,
             serial_port_arg,
             localization_launch,
             planning_launch,
             control_launch,
             serial_bridge_node,
+            rviz_node,
         ]
     )

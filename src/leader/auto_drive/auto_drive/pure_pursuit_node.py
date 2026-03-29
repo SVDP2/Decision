@@ -40,6 +40,19 @@ def yaw_from_quaternion(quaternion):
     return math.atan2(siny_cosp, cosy_cosp)
 
 
+def make_point(x, y, z=0.0):
+    point = Point()
+    point.x = float(x)
+    point.y = float(y)
+    point.z = float(z)
+    return point
+
+
+def yaw_to_quaternion(yaw):
+    half_yaw = yaw * 0.5
+    return (0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw))
+
+
 class PurePursuitNode(Node):
     def __init__(self):
         super().__init__('pure_pursuit_node')
@@ -136,6 +149,18 @@ class PurePursuitNode(Node):
             self.target_marker_pub = self.create_publisher(
                 Marker, '/pp/lookahead_point', 10
             )
+            self.lookahead_line_pub = self.create_publisher(
+                Marker, '/pp/lookahead_line', 10
+            )
+            self.lookahead_circle_pub = self.create_publisher(
+                Marker, '/pp/lookahead_circle', 10
+            )
+            self.vehicle_marker_pub = self.create_publisher(
+                Marker, '/pp/vehicle_pose', 10
+            )
+            self.control_text_pub = self.create_publisher(
+                Marker, '/pp/control_text', 10
+            )
 
         self.timer = self.create_timer(
             1.0 / max(self.control_rate_hz, 1e-3), self.timer_callback
@@ -217,6 +242,14 @@ class PurePursuitNode(Node):
         self.publish_command(steer_deg, throttle)
         if self.visualize:
             self.publish_target_marker(target_x, target_y)
+            self.publish_lookahead_line(
+                vehicle_x, vehicle_y, target_x, target_y
+            )
+            self.publish_lookahead_circle(vehicle_x, vehicle_y, lookahead)
+            self.publish_vehicle_marker(vehicle_x, vehicle_y, yaw)
+            self.publish_control_text(
+                vehicle_x, vehicle_y, lookahead, steer_deg, throttle
+            )
 
     def lookup_vehicle_transform(self):
         try:
@@ -371,9 +404,104 @@ class PurePursuitNode(Node):
         marker.color.r = 1.0
         marker.color.g = 0.6
         marker.color.b = 0.0
-        marker.pose.position = Point(x=x, y=y, z=0.0)
+        marker.pose.position = make_point(x, y)
         marker.pose.orientation.w = 1.0
         self.target_marker_pub.publish(marker)
+
+    def publish_lookahead_line(
+        self, vehicle_x, vehicle_y, target_x, target_y
+    ):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.path_frame_id
+        marker.ns = 'pure_pursuit'
+        marker.id = 1
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.08
+        marker.color.a = 0.9
+        marker.color.r = 1.0
+        marker.color.g = 0.8
+        marker.color.b = 0.1
+        marker.pose.orientation.w = 1.0
+        marker.points.append(make_point(vehicle_x, vehicle_y, 0.03))
+        marker.points.append(make_point(target_x, target_y, 0.03))
+        self.lookahead_line_pub.publish(marker)
+
+    def publish_lookahead_circle(self, vehicle_x, vehicle_y, lookahead):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.path_frame_id
+        marker.ns = 'pure_pursuit'
+        marker.id = 2
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.05
+        marker.color.a = 0.55
+        marker.color.r = 0.2
+        marker.color.g = 0.9
+        marker.color.b = 1.0
+        marker.pose.orientation.w = 1.0
+
+        resolution = 72
+        for index in range(resolution + 1):
+            theta = 2.0 * math.pi * index / resolution
+            marker.points.append(
+                make_point(
+                    vehicle_x + lookahead * math.cos(theta),
+                    vehicle_y + lookahead * math.sin(theta),
+                    0.01,
+                )
+            )
+
+        self.lookahead_circle_pub.publish(marker)
+
+    def publish_vehicle_marker(self, vehicle_x, vehicle_y, yaw):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.path_frame_id
+        marker.ns = 'pure_pursuit'
+        marker.id = 3
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.pose.position = make_point(vehicle_x, vehicle_y, 0.05)
+        qx, qy, qz, qw = yaw_to_quaternion(yaw)
+        marker.pose.orientation.x = qx
+        marker.pose.orientation.y = qy
+        marker.pose.orientation.z = qz
+        marker.pose.orientation.w = qw
+        marker.scale.x = 1.0
+        marker.scale.y = 0.25
+        marker.scale.z = 0.2
+        marker.color.a = 0.95
+        marker.color.r = 0.1
+        marker.color.g = 0.95
+        marker.color.b = 0.3
+        self.vehicle_marker_pub.publish(marker)
+
+    def publish_control_text(
+        self, vehicle_x, vehicle_y, lookahead, steer_deg, throttle
+    ):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.path_frame_id
+        marker.ns = 'pure_pursuit'
+        marker.id = 4
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position = make_point(vehicle_x, vehicle_y, 0.9)
+        marker.pose.orientation.w = 1.0
+        marker.scale.z = 0.35
+        marker.color.a = 0.95
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+        marker.text = (
+            f'Ld {lookahead:.2f} m\n'
+            f'Steer {steer_deg:.1f} deg\n'
+            f'Throttle {throttle:.2f}'
+        )
+        self.control_text_pub.publish(marker)
 
 
 def main(args=None):
