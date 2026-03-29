@@ -17,8 +17,22 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=false \
-  csv_file_path: = gps bag 경로
+  csv_file_path: = gps csv 경로
 ```
+
+- 토픽,TF 확인
+
+ros2 topic echo /vehicle_heading_valid
+ros2 topic echo /auto_steer_angle
+ros2 topic echo /throttle_cmd
+ros2 topic hz /roi_path
+ros2 run tf2_ros tf2_echo csv vehicle_ref
+
+이게 정상일 때 serial_bridge 붙이기
+ros2 launch auto_drive bringup_single_f9p.launch.py \
+  use_serial_bridge:=true \
+  serial_port:=/dev/ttyACM0 \
+  csv_file_path:= csv 경로
 
 
 
