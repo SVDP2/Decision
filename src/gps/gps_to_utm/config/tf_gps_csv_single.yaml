@@ -1,0 +1,10 @@
+tf_gps_csv_single_node:
+  ros__parameters:
+    vehicle_ref_topic: "/vehicle_ref_utm"
+    heading_topic: "/vehicle_heading_rad"
+    heading_valid_topic: "/vehicle_heading_valid"
+    path_topic: "/csv_path"
+    csv_frame_id: "csv"
+    vehicle_frame_id: "vehicle_ref"
+    path_publish_rate_hz: 10.0
+    publish_tf_only_when_heading_valid: true

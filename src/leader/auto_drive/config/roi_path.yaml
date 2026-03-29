@@ -1,0 +1,14 @@
+roi_path_node:
+  ros__parameters:
+    csv_path_topic: "/csv_path"
+    roi_path_topic: "/roi_path"
+    roi_marker_topic: "/roi_path_marker"
+    target_frame: "vehicle_ref"
+    csv_frame: "csv"
+    timer_frequency: 20.0
+    roi_length_m: 6.0
+    use_points_length: false
+    roi_length_points: 60
+    search_span_points: 2000
+    hysteresis_k: 1
+    line_width: 0.3

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(gps_to_utm)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -13,6 +16,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -61,12 +65,30 @@ target_include_directories(azimuth_angle_calculator_node PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
+# single_f9p_heading_node executable
+add_executable(single_f9p_heading_node src/single_f9p_heading.cpp)
+ament_target_dependencies(single_f9p_heading_node rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs)
+target_include_directories(single_f9p_heading_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+# tf_gps_csv_single_node executable
+add_executable(tf_gps_csv_single_node src/tf_gps_csv_single.cpp)
+ament_target_dependencies(tf_gps_csv_single_node rclcpp nav_msgs std_msgs geometry_msgs tf2 tf2_ros)
+target_include_directories(tf_gps_csv_single_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
 # Install executables
 install(TARGETS
   f9r_to_utm
   f9p_to_utm
   tf_gps_csv_node
   azimuth_angle_calculator_node
+  single_f9p_heading_node
+  tf_gps_csv_single_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

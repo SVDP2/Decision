@@ -1,0 +1,18 @@
+single_f9p_heading_node:
+  ros__parameters:
+    utm_topic: "/f9p_utm"
+    velocity_topic: "/f9p/fix_velocity"
+    heading_topic: "/vehicle_heading_rad"
+    heading_valid_topic: "/vehicle_heading_valid"
+    speed_topic: "/vehicle_speed"
+    vehicle_ref_topic: "/vehicle_ref_utm"
+    use_velocity_heading: true
+    use_path_tangent_fallback: true
+    v_heading_enable: 1.0
+    v_heading_disable: 0.5
+    velocity_timeout_sec: 0.5
+    d_min_for_position_heading: 0.4
+    heading_filter_alpha: 0.3
+    antenna_offset_x: 0.0
+    antenna_offset_y: 0.0
+    path_tangent_step: 5

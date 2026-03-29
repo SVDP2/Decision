@@ -1,0 +1,8 @@
+mission_supervisor_node:
+  ros__parameters:
+    throttle_from_planning_topic: "/throttle_from_planning"
+    throttle_cmd_topic: "/throttle_cmd"
+    safety_stop_topic: "/safety_stop"
+    manual_stop_topic: "/manual_stop"
+    command_timeout_sec: 0.5
+    publish_rate_hz: 20.0
