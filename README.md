@@ -1,6 +1,4 @@
 # GP_Decision
-
-
 - gps 구동 명령어
 
 ```
@@ -14,6 +12,17 @@ ros2 launch ntrip_client ntrip_client_launch.py
 python3 f9p_to_csv.py
 ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
+
+- 경로추종 chain
+```
+ros2 launch auto_drive bringup_single_f9p.launch.py \
+  use_serial_bridge:=false \
+  csv_file_path: = gps bag 경로
+```
+
+
+
+
 
 # 시나리오 for Leader
 
