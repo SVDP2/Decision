@@ -33,6 +33,11 @@ class SerialBridgeNode(Node):
         self.tx_period_sec = float(
             self.declare_parameter('tx_period_sec', 0.067).value
         )
+        self.expect_bridge_debug_counters = bool(
+            self.declare_parameter(
+                'expect_bridge_debug_counters', True
+            ).value
+        )
 
         self.serial_port = None
         self.requested_speed = 0.0
@@ -52,6 +57,14 @@ class SerialBridgeNode(Node):
         self.speed_target_pwm = 0.0
         self.auto_speed = 0.0
         self.auto_angle = 0.0
+        self.tx_packet_count = 0
+        self.rx_status_packet_count = 0
+        self.rx_raw_byte_count = 0
+        self.rx_sync_drop_count = 0
+        self.rx_packet_crc_fail_count = 0
+        self.rx_unpack_error_count = 0
+        self.last_warned_crc_fail_count = 0
+        self.last_bridge_warning_time = 0.0
 
         self.twist_msgs_pub = self.create_publisher(
             TwistWithCovarianceStamped, '/encoder/twist', 10
@@ -105,8 +118,21 @@ class SerialBridgeNode(Node):
     def open_serial_port(self):
         try:
             self.serial_port = serial.Serial(
-                self.port_name, self.baudrate, timeout=0.1
+                self.port_name,
+                self.baudrate,
+                timeout=0.1,
+                write_timeout=0.1,
             )
+            try:
+                self.serial_port.exclusive = True
+            except (AttributeError, ValueError, SerialException):
+                pass
+
+            # Mega 2560 opens with an auto-reset pulse. Give the sketch time
+            # to boot, then drop any boot-time garbage before parsing packets.
+            time.sleep(1.0)
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
             self.get_logger().info(
                 f'Serial port opened: {self.port_name}@{self.baudrate}'
             )
@@ -139,6 +165,16 @@ class SerialBridgeNode(Node):
 
     def current_speed_command(self):
         return 0.0 if self.stop_override else self.requested_speed
+
+    def bridge_cmd_ok_count(self):
+        if not self.expect_bridge_debug_counters:
+            return None
+        return max(0, int(round(self.auto_speed)))
+
+    def bridge_crc_fail_count(self):
+        if not self.expect_bridge_debug_counters:
+            return None
+        return max(0, int(round(self.auto_angle)))
 
     def convert_to_nav_msgs(self, speed, angle):
         twist_stamped = TwistWithCovarianceStamped()
@@ -176,29 +212,112 @@ class SerialBridgeNode(Node):
 
             packet = header + payload + bytes([crc])
             self.serial_port.write(packet)
+            self.tx_packet_count += 1
         except Exception as exc:
             self.get_logger().warn(f'Serial write failed: {exc}')
             self.reconnect_serial()
 
+    def maybe_warn_bridge_state(self):
+        if not self.expect_bridge_debug_counters:
+            return
+
+        now = time.monotonic()
+        if now - self.last_bridge_warning_time < 1.0:
+            return
+
+        cmd_ok = self.bridge_cmd_ok_count()
+        crc_fail = self.bridge_crc_fail_count()
+        if cmd_ok is None or crc_fail is None:
+            return
+
+        if (
+            self.tx_packet_count >= 5
+            and self.rx_raw_byte_count == 0
+        ):
+            self.get_logger().warn(
+                'No bytes are arriving from Arduino on the serial bridge. '
+                'Check whether another process is opening/resetting the port, '
+                'whether the flashed board on this port is the expected Mega, '
+                'and whether USB serial is stable.'
+            )
+            self.last_bridge_warning_time = now
+            return
+
+        if self.rx_raw_byte_count > 0 and self.rx_status_packet_count == 0:
+            self.get_logger().warn(
+                'Raw bytes are arriving from Arduino, but no valid status '
+                'packet has been decoded yet. Check packet sync/CRC and '
+                'whether text output is mixed into the binary stream.'
+            )
+            self.last_bridge_warning_time = now
+            return
+
+        if (
+            self.tx_packet_count >= 5
+            and self.rx_status_packet_count >= 5
+            and cmd_ok == 0
+        ):
+            self.get_logger().warn(
+                'Arduino status packets are arriving, but bridge CMD_OK is '
+                'still 0. The firmware is not accepting PC->Arduino command '
+                'packets. Check the flashed sketch, serial port ownership, '
+                'and command packet parsing.'
+            )
+            self.last_bridge_warning_time = now
+            return
+
+        if crc_fail > self.last_warned_crc_fail_count:
+            self.get_logger().warn(
+                'Arduino is reporting bridge CRC failures. Check baud rate, '
+                'header/packet framing, and whether another process is '
+                f'writing to {self.port_name}.'
+            )
+            self.last_warned_crc_fail_count = crc_fail
+            self.last_bridge_warning_time = now
+
     def print_status(self):
-        self.get_logger().info(
-            f"\n{'━' * 60}\n"
+        lines = [
+            f"\n{'━' * 60}",
             '[LOOP]  | '
             f'ARDUINO: {self.arduino_loop_interval:>5.1f} ms '
             f'({self.arduino_loop_hz:>4.1f} hz) | '
             f'ROS2: {self.ros_loop_interval:>5.1f} ms '
-            f'({self.ros_loop_hz:>4.1f} hz)\n'
+            f'({self.ros_loop_hz:>4.1f} hz)',
             '[CMD]   | '
             f'SPEED: {self.current_speed_command():>6.2f} m/s | '
-            f'ANGLE: {self.requested_angle:>6.2f} deg\n'
+            f'ANGLE: {self.requested_angle:>6.2f} deg',
             '[STATE] | '
             f'SPEED: {self.speed_filtered:>6.2f} m/s | '
-            f'ANGLE: {self.steer_filtered_angle:>6.2f} deg\n'
+            f'ANGLE: {self.steer_filtered_angle:>6.2f} deg',
+            '[PWM]   | '
+            f'DRIVE_TGT: {self.speed_target_pwm:>6.1f} | '
+            f'STEER_OUT: {self.steer_target_pwm:>6.1f}',
             '[AUTO]  | '
-            f'SPEED: {self.auto_speed:>6.2f} m/s | '
-            f'ANGLE: {self.auto_angle:>6.2f} deg\n'
-            f"{'━' * 60}\n"
-        )
+            f'SPEED: {self.auto_speed:>6.2f} | '
+            f'ANGLE: {self.auto_angle:>6.2f}',
+        ]
+
+        if self.expect_bridge_debug_counters:
+            cmd_ok = self.bridge_cmd_ok_count()
+            crc_fail = self.bridge_crc_fail_count()
+            lines.append(
+                '[BRIDGE]| '
+                f'CMD_OK: {cmd_ok:>6} | '
+                f'CRC_FAIL: {crc_fail:>6} | '
+                f'TX: {self.tx_packet_count:>6} | '
+                f'RX: {self.rx_status_packet_count:>6}'
+            )
+            lines.append(
+                '[RXDBG] | '
+                f'BYTES: {self.rx_raw_byte_count:>6} | '
+                f'SYNC_DROP: {self.rx_sync_drop_count:>6} | '
+                f'CRC: {self.rx_packet_crc_fail_count:>6} | '
+                f'UNPACK: {self.rx_unpack_error_count:>6}'
+            )
+
+        lines.append(f"{'━' * 60}\n")
+        self.get_logger().info('\n'.join(lines))
+        self.maybe_warn_bridge_state()
 
     def read_serial_loop(self):
         header = b'\xAA\x55'
@@ -212,16 +331,18 @@ class SerialBridgeNode(Node):
 
             try:
                 if self.serial_port.in_waiting:
-                    buffer.extend(
-                        self.serial_port.read(self.serial_port.in_waiting)
-                    )
+                    data = self.serial_port.read(self.serial_port.in_waiting)
+                    self.rx_raw_byte_count += len(data)
+                    buffer.extend(data)
 
                 while len(buffer) >= packet_size:
                     header_index = buffer.find(header)
                     if header_index == -1:
+                        self.rx_sync_drop_count += len(buffer)
                         buffer.clear()
                         break
                     if header_index > 0:
+                        self.rx_sync_drop_count += header_index
                         del buffer[:header_index]
 
                     if len(buffer) < packet_size:
@@ -234,10 +355,17 @@ class SerialBridgeNode(Node):
                         crc_calculated ^= byte
 
                     if crc_received != crc_calculated:
-                        del buffer[:packet_size]
+                        self.rx_packet_crc_fail_count += 1
+                        del buffer[:1]
                         continue
 
-                    unpacked = struct.unpack('<ff ff ff L', payload)
+                    try:
+                        unpacked = struct.unpack('<ff ff ff L', payload)
+                    except struct.error:
+                        self.rx_unpack_error_count += 1
+                        del buffer[:1]
+                        continue
+
                     (
                         steer_filtered_angle,
                         steer_target_pwm,
@@ -282,6 +410,7 @@ class SerialBridgeNode(Node):
                     self.speed_target_pwm = speed_target_pwm
                     self.auto_speed = auto_speed
                     self.auto_angle = auto_angle
+                    self.rx_status_packet_count += 1
                     self.convert_to_nav_msgs(
                         speed_filtered, steer_filtered_angle
                     )
