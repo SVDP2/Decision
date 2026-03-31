@@ -35,3 +35,6 @@ env/
 *.swo
 .DS_Store
 Thumbs.db
+
+# ROS bag
+bag/
