@@ -1,5 +1,5 @@
 tf_gps_csv_node:
   ros__parameters:
-    # 3월 14일 간이 백파일
-    csv_file_path: "/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_14-16_23_49.csv"   
+    # 3월 30일
+    csv_file_path: "/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv"
     
