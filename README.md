@@ -17,8 +17,12 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=false \
-  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
+  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_29-17_44_57.csv
 ```
+
+
+- ros2 topic pub -1 /auto_steer_angle std_msgs/msg/Float32 "{data: 0.0}"
+
 
 - 토픽,TF 확인
 
@@ -32,7 +36,7 @@ ros2 run tf2_ros tf2_echo csv vehicle_ref
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=true \
   serial_port:=/dev/ttyACM0 \
-  csv_file_path:= csv 경로
+  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_29-17_44_57.csv
 
 
 

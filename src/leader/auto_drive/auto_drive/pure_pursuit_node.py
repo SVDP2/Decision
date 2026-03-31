@@ -96,10 +96,10 @@ class PurePursuitNode(Node):
             self.declare_parameter('steer_limit_deg', 20.0).value
         )
         self.min_throttle = float(
-            self.declare_parameter('min_throttle', 0.45).value
+            self.declare_parameter('min_throttle', 0.2).value
         )
         self.max_throttle = float(
-            self.declare_parameter('max_throttle', 0.7).value
+            self.declare_parameter('max_throttle', 0.2).value
         )
         self.throttle_ema_alpha = float(
             self.declare_parameter('throttle_ema_alpha', 0.5).value
