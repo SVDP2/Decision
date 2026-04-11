@@ -17,12 +17,8 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=false \
-  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_29-17_44_57.csv
+  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
 ```
-
-
-- ros2 topic pub -1 /auto_steer_angle std_msgs/msg/Float32 "{data: 0.0}"
-
 
 - 토픽,TF 확인
 
@@ -36,11 +32,25 @@ ros2 run tf2_ros tf2_echo csv vehicle_ref
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=true \
   serial_port:=/dev/ttyACM0 \
-  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_29-17_44_57.csv
+  csv_file_path:= csv 경로
 
 
 
 
+
+## 현재 구현 범위
+
+- 구현 완료
+  - single F9P 기반 Highway형 GPS path 추종 체인
+  - 선점형 mission supervisor
+    - mission layer: `/drive_context` 기반 `HIGHWAY/CITY/COMPLEX` 상태 관리
+    - safety layer: `/manual_stop`, `/safety_stop`, `/traffic_stop && /intersection`, `/roi_warning`가 `throttle_cmd`를 선점
+    - 상태 토픽: `/mission_state`, `/active_algorithm`, `/safety_status`, `/safety_active`
+  - 현재 City/Complex는 전용 planner 대신 state 관리와 속도 정책까지 반영
+
+- 확장 목표
+  - City 전용 정지/재출발 판단 로직과 perception 연동 고도화
+  - Complex에서 LiDAR cone map + RRT 기반 local waypoint 생성 및 추종 통합
 
 # 시나리오 for Leader
 
