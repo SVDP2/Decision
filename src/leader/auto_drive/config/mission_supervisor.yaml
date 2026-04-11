@@ -2,7 +2,23 @@ mission_supervisor_node:
   ros__parameters:
     throttle_from_planning_topic: "/throttle_from_planning"
     throttle_cmd_topic: "/throttle_cmd"
+    drive_context_topic: "/drive_context"
     safety_stop_topic: "/safety_stop"
     manual_stop_topic: "/manual_stop"
+    traffic_stop_topic: "/traffic_stop"
+    intersection_topic: "/intersection"
+    roi_warning_topic: "/roi_warning"
+    mission_state_topic: "/mission_state"
+    active_algorithm_topic: "/active_algorithm"
+    safety_status_topic: "/safety_status"
+    safety_active_topic: "/safety_active"
     command_timeout_sec: 0.5
+    release_hysteresis_sec: 0.5
     publish_rate_hz: 20.0
+    default_mission: "highway"
+    highway_throttle_scale: 1.0
+    highway_throttle_limit: 0.7
+    city_throttle_scale: 0.75
+    city_throttle_limit: 0.5
+    complex_throttle_scale: 0.6
+    complex_throttle_limit: 0.4
