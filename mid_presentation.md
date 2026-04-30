@@ -244,7 +244,7 @@ source install/setup.bash
 
 ros2 run auto_drive mission_supervisor_node \
   --ros-args \
-  --params-file <WS>/GP_Decision/src/leader/auto_drive/config/mission_supervisor.yaml \
+  --params-file /home/yoo/GP_Decision/src/leader/auto_drive/config/mission_supervisor.yaml \
   -p publish_rate_hz:=2.0 \
   -p command_timeout_sec:=5.0
 ```

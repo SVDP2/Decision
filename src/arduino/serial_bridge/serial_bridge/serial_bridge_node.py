@@ -28,7 +28,7 @@ class SerialBridgeNode(Node):
             'steer_topic', '/auto_steer_angle'
         ).value
         self.go_topic = self.declare_parameter('go_topic', '/go').value
-        self.port_name = self.declare_parameter('port', '/dev/ttyACM0').value
+        self.port_name = self.declare_parameter('port', '/dev/ttyACM2').value
         self.baudrate = int(self.declare_parameter('baud', 115200).value)
         self.tx_period_sec = float(
             self.declare_parameter('tx_period_sec', 0.067).value
