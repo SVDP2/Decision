@@ -31,6 +31,10 @@ setup(
         'console_scripts': [
             'roi_path_node = auto_drive.roi_path_node:main',
             'pure_pursuit_node = auto_drive.pure_pursuit_node:main',
+            'complex_target_node = auto_drive.complex_target_node:main',
+            'complex_rrt_planner_node = '
+            'auto_drive.complex_rrt_planner_node:main',
+            'command_mux_node = auto_drive.command_mux_node:main',
             'mission_supervisor_node = '
             'auto_drive.mission_supervisor_node:main',
         ],

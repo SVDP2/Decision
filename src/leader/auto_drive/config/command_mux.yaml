@@ -1,0 +1,14 @@
+command_mux_node:
+  ros__parameters:
+    mission_state_topic: "/mission_state"
+    drive_context_topic: "/drive_context"
+    highway_steer_topic: "/highway/auto_steer_angle"
+    highway_throttle_topic: "/highway/throttle_from_planning"
+    complex_steer_topic: "/complex/auto_steer_angle"
+    complex_throttle_topic: "/complex/throttle_from_planning"
+    output_steer_topic: "/auto_steer_angle"
+    output_throttle_topic: "/throttle_from_planning"
+    active_source_topic: "/planning_command_source"
+    command_timeout_sec: 0.5
+    publish_rate_hz: 20.0
+    default_mission: "highway"

@@ -1,0 +1,283 @@
+GP_Decision Complex RRT Home Test Strategy
+==========================================
+
+Goal
+----
+- 집에서는 실차 주행이 아니라 ROS2 토픽 흐름과 planner 출력 검증을 목표로 한다.
+- Arduino, 모터, serial bridge는 처음에는 연결하지 않는다.
+- 확인 순서:
+  1. 빌드 가능 여부
+  2. launch 후 노드/토픽 생성 여부
+  3. Highway command 흐름
+  4. Complex RRT local path 생성
+  5. Complex command 선택
+  6. Safety stop에서 throttle 차단
+
+
+0. Safety Rule
+--------------
+- 집 테스트에서는 반드시 serial bridge를 끈다.
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/path/to/test.csv \
+    use_serial_bridge:=false \
+    use_rviz:=true
+
+- Arduino/모터 연결 전까지는 아래 토픽만 확인한다.
+  - /auto_steer_angle
+  - /throttle_from_planning
+  - /throttle_cmd
+  - /complex/local_path
+  - /planning_command_source
+
+
+1. Build Test
+-------------
+Command:
+
+  cd /Users/yoosm/FinalProject/GP_Decision
+  colcon build --packages-select auto_drive
+  source install/setup.bash
+
+Pass condition:
+- auto_drive build 성공.
+- complex_target_node, complex_rrt_planner_node, command_mux_node 실행 파일이 등록됨.
+
+
+2. Unit Logic Test
+------------------
+Command:
+
+  PYTHONPATH=src/leader/auto_drive python3 -m unittest \
+    src/leader/auto_drive/test/test_complex_rrt_core.py \
+    src/leader/auto_drive/test/test_command_mux_logic.py \
+    src/leader/auto_drive/test/test_mission_supervisor_logic.py
+
+Pass condition:
+- Ran 12 tests
+- OK
+
+
+3. Launch Smoke Test
+--------------------
+Command:
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/path/to/test.csv \
+    use_serial_bridge:=false \
+    use_rviz:=true
+
+Check:
+
+  ros2 topic list | grep complex
+  ros2 topic echo /mission_state
+  ros2 topic echo /planning_command_source
+  ros2 topic echo /complex/rrt_status
+
+Expected:
+- /complex/rrt_target
+- /complex/local_path
+- /complex/rrt_status
+- /complex/auto_steer_angle
+- /complex/throttle_from_planning
+- /planning_command_source
+
+If GPS/TF is not running:
+- /complex/rrt_status may stay missing_target.
+- This is acceptable at this stage.
+
+
+4. Highway Command Flow Test
+----------------------------
+Set context:
+
+  ros2 topic pub /drive_context std_msgs/msg/String "{data: highway}" --once
+
+Check:
+
+  ros2 topic echo /mission_state
+  ros2 topic echo /planning_command_source
+  ros2 topic echo /highway/auto_steer_angle
+  ros2 topic echo /highway/throttle_from_planning
+  ros2 topic echo /auto_steer_angle
+  ros2 topic echo /throttle_from_planning
+
+Expected flow:
+
+  /csv_path
+    -> roi_path_node
+    -> /roi_path
+    -> pure_pursuit_node
+    -> /highway/auto_steer_angle
+    -> /highway/throttle_from_planning
+    -> command_mux_node
+    -> /auto_steer_angle
+    -> /throttle_from_planning
+    -> mission_supervisor_node
+    -> /throttle_cmd
+
+Pass condition:
+- /planning_command_source = highway
+- /auto_steer_angle follows /highway/auto_steer_angle
+- /throttle_from_planning follows /highway/throttle_from_planning
+
+
+5. Complex RRT Test Without GPS
+-------------------------------
+Use this when /complex/rrt_target is not generated because GPS/TF is unavailable.
+
+Terminal A: publish target manually.
+
+  ros2 topic pub /complex/rrt_target geometry_msgs/msg/PointStamped "{
+    header: {frame_id: 'vehicle_ref'},
+    point: {x: 6.0, y: 0.0, z: 0.0}
+  }" -r 10
+
+Terminal B: publish cone map manually.
+
+  ros2 topic pub /complex/cones geometry_msgs/msg/PoseArray "{
+    header: {frame_id: 'vehicle_ref'},
+    poses: [
+      {position: {x: 2.0, y: 1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 3.5, y: 1.1, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 5.0, y: 1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 2.0, y: -1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 3.5, y: -1.1, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 5.0, y: -1.0, z: 0.0}, orientation: {w: 1.0}}
+    ]
+  }" -r 10
+
+Check:
+
+  ros2 topic echo /complex/rrt_status
+  ros2 topic echo /complex/local_path
+  ros2 topic echo /complex/auto_steer_angle
+  ros2 topic echo /complex/throttle_from_planning
+
+Expected:
+- /complex/rrt_status = direct_clear, reached_target, or best_branch
+- /complex/local_path.poses is not empty
+- /complex/auto_steer_angle publishes values
+- /complex/throttle_from_planning publishes values
+
+
+6. Complex Command Selection Test
+---------------------------------
+Set context:
+
+  ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+
+Check:
+
+  ros2 topic echo /mission_state
+  ros2 topic echo /planning_command_source
+  ros2 topic echo /complex/auto_steer_angle
+  ros2 topic echo /complex/throttle_from_planning
+  ros2 topic echo /auto_steer_angle
+  ros2 topic echo /throttle_from_planning
+
+Expected flow:
+
+  /complex/rrt_target
+  /complex/cones or /detected_objects_center
+    -> complex_rrt_planner_node
+    -> /complex/local_path
+    -> complex_pure_pursuit_node
+    -> /complex/auto_steer_angle
+    -> /complex/throttle_from_planning
+    -> command_mux_node
+    -> /auto_steer_angle
+    -> /throttle_from_planning
+    -> mission_supervisor_node
+    -> /throttle_cmd
+
+Pass condition:
+- /planning_command_source = complex
+- /auto_steer_angle follows /complex/auto_steer_angle
+- /throttle_from_planning follows /complex/throttle_from_planning
+
+
+7. Safety Stop Test
+-------------------
+Set manual stop:
+
+  ros2 topic pub /manual_stop std_msgs/msg/Bool "{data: true}" --once
+
+Check:
+
+  ros2 topic echo /safety_active
+  ros2 topic echo /safety_status
+  ros2 topic echo /throttle_cmd
+
+Expected:
+- /safety_active = true
+- /safety_status = STOP_MANUAL
+- /throttle_cmd = 0.0
+
+Release:
+
+  ros2 topic pub /manual_stop std_msgs/msg/Bool "{data: false}" --once
+
+Expected:
+- safety hysteresis 이후 /safety_active = false
+- /throttle_cmd resumes according to mission policy
+
+
+8. RViz Visual Checks
+---------------------
+Useful topics:
+- /csv_path
+- /roi_path
+- /complex/target_roi_path
+- /complex/rrt_target_marker
+- /complex/rrt_tree
+- /complex/rrt_obstacles
+- /complex/local_path
+- /complex/local_path_marker
+
+Expected:
+- Highway: /roi_path follows CSV path ahead of vehicle.
+- Complex: /complex/rrt_target appears in front of vehicle_ref.
+- Complex: /complex/rrt_obstacles appears around cone positions.
+- Complex: /complex/local_path passes between cone obstacles.
+
+
+9. Common Failure Cases
+-----------------------
+Case: /complex/rrt_status = missing_target
+- /complex/rrt_target is not being published.
+- Check /csv_path and TF csv -> vehicle_ref.
+- For home test, manually publish /complex/rrt_target.
+
+Case: /complex/rrt_status = missing_cones
+- No cone input.
+- Publish /complex/cones manually.
+- Or connect LiDAR perception to /detected_objects_center.
+
+Case: /planning_command_source = highway while expecting complex
+- Check /drive_context.
+- Check /mission_state.
+- Command mux uses /mission_state and /drive_context.
+
+Case: /auto_steer_angle is zero
+- Selected planner command may be stale.
+- Check /planning_command_source for highway_stale or complex_stale.
+- Check selected planner output topic frequency.
+
+Case: /throttle_cmd is zero
+- mission_supervisor may be safety active.
+- Check /safety_active and /safety_status.
+- Check /manual_stop, /safety_stop, /traffic_stop, /intersection, /roi_warning.
+
+
+10. Home Test Pass Checklist
+----------------------------
+- [ ] colcon build succeeds.
+- [ ] unit tests pass.
+- [ ] launch starts without node crash.
+- [ ] /planning_command_source = highway in highway context.
+- [ ] /planning_command_source = complex in complex context.
+- [ ] manual /complex/rrt_target + /complex/cones creates /complex/local_path.
+- [ ] /complex/auto_steer_angle publishes after /complex/local_path.
+- [ ] /manual_stop true forces /throttle_cmd = 0.0.
+- [ ] use_serial_bridge remains false during home test.

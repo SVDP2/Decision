@@ -1,0 +1,35 @@
+complex_rrt_planner_node:
+  ros__parameters:
+    planning_frame: "vehicle_ref"
+    cone_pose_array_topic: "/complex/cones"
+    cone_marker_topic: "/detected_objects_center"
+    target_topic: "/complex/rrt_target"
+    predicted_obstacle_topic: "/complex/predicted_obstacles"
+    local_path_topic: "/complex/local_path"
+    status_topic: "/complex/rrt_status"
+    tree_marker_topic: "/complex/rrt_tree"
+    obstacle_marker_topic: "/complex/rrt_obstacles"
+    path_marker_topic: "/complex/local_path_marker"
+    plan_rate_hz: 8.0
+    cone_timeout_sec: 0.7
+    target_timeout_sec: 0.7
+    random_seed: 0
+    plan_distance: 5.0
+    expand_distance: 0.7
+    turn_angle_deg: 20.0
+    max_iterations: 700
+    goal_tolerance: 0.8
+    target_sample_probability: 0.75
+    target_sample_radius: 2.5
+    random_sample_x_min: 0.0
+    random_sample_x_max: 7.0
+    random_sample_y_abs: 4.0
+    cone_radius: 0.8
+    predicted_obstacle_radius: 0.6
+    min_obstacle_x: -0.5
+    max_obstacle_distance: 12.0
+    max_obstacle_abs_y: 6.0
+    min_target_x: 0.8
+    path_resolution: 0.25
+    allow_direct_path: true
+    require_cones: true

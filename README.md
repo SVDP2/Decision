@@ -52,6 +52,40 @@ ros2 launch auto_drive bringup_single_f9p.launch.py \
   - City 전용 정지/재출발 판단 로직과 perception 연동 고도화
   - Complex에서 LiDAR cone map + RRT 기반 local waypoint 생성 및 추종 통합
 
+- Complex RRT 1차 통합
+  - `/csv_path`를 `vehicle_ref` 기준 전방 target으로 변환하여 `/complex/rrt_target` 발행
+  - `/complex/cones` 또는 `/detected_objects_center` 기반 cone obstacle 생성
+  - `/complex/rrt_target` + cone obstacle로 `/complex/local_path` 생성
+  - `complex_pure_pursuit_node`가 `/complex/local_path`를 추종하여 `/complex/auto_steer_angle`, `/complex/throttle_from_planning` 발행
+  - `command_mux_node`가 `/mission_state` 또는 `/drive_context`에 따라 Highway/Complex planning command를 선택하고 최종 `/auto_steer_angle`, `/throttle_from_planning` 발행
+  - 최종 throttle은 기존 mission supervisor가 `/throttle_from_planning`을 받아 safety/mission policy를 적용한 뒤 `/throttle_cmd`로 발행
+
+## Complex RRT 실행 흐름
+
+기본 bringup은 기존과 동일하게 사용한다.
+
+```bash
+ros2 launch auto_drive bringup_single_f9p.launch.py csv_file_path:=/path/to/path.csv
+```
+
+Complex로 전환하려면 `/drive_context`에 complex 계열 문자열을 발행한다.
+
+```bash
+ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+```
+
+LiDAR perception은 다음 중 하나를 `vehicle_ref` 기준 또는 TF 변환 가능한 frame으로 발행해야 한다.
+
+- `/complex/cones` (`geometry_msgs/PoseArray`): cone 중심점 목록
+- `/detected_objects_center` (`visualization_msgs/MarkerArray`): VoxelNeXt cone center marker 출력과 호환
+
+주요 Complex 출력 토픽:
+
+- `/complex/rrt_target`: GPS path 기반 RRT target
+- `/complex/local_path`: RRT local path
+- `/complex/rrt_status`: `missing_cones`, `direct_clear`, `reached_target`, `best_branch` 등 planner 상태
+- `/planning_command_source`: 현재 최종 planning command source
+
 # 시나리오 for Leader
 
 - **Highway**

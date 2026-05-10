@@ -1,0 +1,24 @@
+complex_pure_pursuit_node:
+  ros__parameters:
+    roi_path_topic: "/complex/local_path"
+    heading_valid_topic: "/vehicle_heading_valid"
+    steer_topic: "/complex/auto_steer_angle"
+    throttle_topic: "/complex/throttle_from_planning"
+    base_frame: "vehicle_ref"
+    path_frame: "vehicle_ref"
+    wheelbase: 0.724
+    min_lookahead: 1.8
+    max_lookahead: 3.0
+    beta: 4.0
+    curvature_window: 5
+    curvature_ema_alpha: 0.7
+    ld_ema_alpha: 0.5
+    steer_limit_deg: 20.0
+    min_throttle: 0.28
+    max_throttle: 0.42
+    throttle_ema_alpha: 0.5
+    control_rate_hz: 30.0
+    steer_zero_when_heading_invalid: true
+    throttle_zero_when_heading_invalid: true
+    goal_reached_distance: 0.8
+    visualize: false
