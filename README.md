@@ -54,7 +54,7 @@ ros2 launch auto_drive bringup_single_f9p.launch.py \
 
 - Complex RRT 1차 통합
   - `/csv_path`를 `vehicle_ref` 기준 전방 target으로 변환하여 `/complex/rrt_target` 발행
-  - `/complex/cones` 또는 `/detected_objects_center` 기반 cone obstacle 생성
+  - `/complex/cones` 또는 `/detected_objects` 기반 cone obstacle 생성
   - `/complex/rrt_target` + cone obstacle로 `/complex/local_path` 생성
   - `complex_pure_pursuit_node`가 `/complex/local_path`를 추종하여 `/complex/auto_steer_angle`, `/complex/throttle_from_planning` 발행
   - `command_mux_node`가 `/mission_state` 또는 `/drive_context`에 따라 Highway/Complex planning command를 선택하고 최종 `/auto_steer_angle`, `/throttle_from_planning` 발행
@@ -77,7 +77,25 @@ ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
 LiDAR perception은 다음 중 하나를 `vehicle_ref` 기준 또는 TF 변환 가능한 frame으로 발행해야 한다.
 
 - `/complex/cones` (`geometry_msgs/PoseArray`): cone 중심점 목록
-- `/detected_objects_center` (`visualization_msgs/MarkerArray`): VoxelNeXt cone center marker 출력과 호환
+- `/detected_objects` (`visualization_msgs/MarkerArray`): `objects` marker와 `info` label marker를 매칭해 `Cone` 객체 중심점을 추출
+  - object marker: `ns=objects`, `id=N`, `pose.position` = cone 중심좌표
+  - label marker: `ns=info`, `id=10000+N`, `text` 첫 줄 = class label
+  - 현재 매칭 규칙: `info.id - 10000 == objects.id`, label이 `cone_label_names`에 포함되면 cone obstacle로 사용
+
+`/detected_objects` marker가 `frame_id=velodyne`으로 나오면 `vehicle_ref -> velodyne` TF가 필요하다. 기본 launch는 identity static TF를 발행한다. 실제 LiDAR 장착 위치가 `vehicle_ref`와 다르면 launch argument로 보정한다.
+
+```bash
+ros2 launch auto_drive bringup_single_f9p.launch.py \
+  csv_file_path:=/path/to/path.csv \
+  velodyne_x:=0.0 velodyne_y:=0.0 velodyne_z:=0.0 \
+  velodyne_yaw:=0.0 velodyne_pitch:=0.0 velodyne_roll:=0.0
+```
+
+다른 LiDAR bringup이 이미 같은 TF를 발행하면 중복 TF를 피하기 위해 `publish_velodyne_tf:=false`로 실행한다. TF 확인은 다음 명령을 사용한다.
+
+```bash
+ros2 run tf2_ros tf2_echo vehicle_ref velodyne
+```
 
 주요 Complex 출력 토픽:
 

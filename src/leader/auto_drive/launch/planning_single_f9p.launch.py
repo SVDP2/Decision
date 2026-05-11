@@ -2,6 +2,9 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -22,6 +25,25 @@ def generate_launch_description():
     )
     command_mux_params = os.path.join(
         auto_drive_share_dir, 'config', 'command_mux.yaml'
+    )
+
+    publish_velodyne_tf = LaunchConfiguration('publish_velodyne_tf')
+    velodyne_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='vehicle_ref_to_velodyne_tf',
+        output='screen',
+        condition=IfCondition(publish_velodyne_tf),
+        arguments=[
+            LaunchConfiguration('velodyne_x'),
+            LaunchConfiguration('velodyne_y'),
+            LaunchConfiguration('velodyne_z'),
+            LaunchConfiguration('velodyne_yaw'),
+            LaunchConfiguration('velodyne_pitch'),
+            LaunchConfiguration('velodyne_roll'),
+            LaunchConfiguration('vehicle_frame'),
+            LaunchConfiguration('velodyne_frame'),
+        ],
     )
 
     roi_path_node = Node(
@@ -80,6 +102,52 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                'publish_velodyne_tf',
+                default_value='true',
+                description='Publish static TF vehicle_frame -> velodyne_frame.',
+            ),
+            DeclareLaunchArgument(
+                'vehicle_frame',
+                default_value='vehicle_ref',
+                description='Vehicle planning frame used as static TF parent.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_frame',
+                default_value='velodyne',
+                description='LiDAR frame used by detected object markers.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_x',
+                default_value='0.0',
+                description='LiDAR x offset from vehicle_frame in meters.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_y',
+                default_value='0.0',
+                description='LiDAR y offset from vehicle_frame in meters.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_z',
+                default_value='0.0',
+                description='LiDAR z offset from vehicle_frame in meters.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_yaw',
+                default_value='0.0',
+                description='LiDAR yaw offset from vehicle_frame in radians.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_pitch',
+                default_value='0.0',
+                description='LiDAR pitch offset from vehicle_frame in radians.',
+            ),
+            DeclareLaunchArgument(
+                'velodyne_roll',
+                default_value='0.0',
+                description='LiDAR roll offset from vehicle_frame in radians.',
+            ),
+            velodyne_tf_node,
             roi_path_node,
             pure_pursuit_node,
             complex_target_node,

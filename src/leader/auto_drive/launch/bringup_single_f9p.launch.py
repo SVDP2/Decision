@@ -37,6 +37,51 @@ def generate_launch_description():
     serial_port_arg = DeclareLaunchArgument(
         'serial_port', default_value='/dev/ttyACM0'
     )
+    publish_velodyne_tf_arg = DeclareLaunchArgument(
+        'publish_velodyne_tf',
+        default_value='true',
+        description='Publish static TF vehicle_frame -> velodyne_frame.',
+    )
+    vehicle_frame_arg = DeclareLaunchArgument(
+        'vehicle_frame',
+        default_value='vehicle_ref',
+        description='Vehicle planning frame used as static TF parent.',
+    )
+    velodyne_frame_arg = DeclareLaunchArgument(
+        'velodyne_frame',
+        default_value='velodyne',
+        description='LiDAR frame used by detected object markers.',
+    )
+    velodyne_x_arg = DeclareLaunchArgument(
+        'velodyne_x',
+        default_value='0.0',
+        description='LiDAR x offset from vehicle_frame in meters.',
+    )
+    velodyne_y_arg = DeclareLaunchArgument(
+        'velodyne_y',
+        default_value='0.0',
+        description='LiDAR y offset from vehicle_frame in meters.',
+    )
+    velodyne_z_arg = DeclareLaunchArgument(
+        'velodyne_z',
+        default_value='0.0',
+        description='LiDAR z offset from vehicle_frame in meters.',
+    )
+    velodyne_yaw_arg = DeclareLaunchArgument(
+        'velodyne_yaw',
+        default_value='0.0',
+        description='LiDAR yaw offset from vehicle_frame in radians.',
+    )
+    velodyne_pitch_arg = DeclareLaunchArgument(
+        'velodyne_pitch',
+        default_value='0.0',
+        description='LiDAR pitch offset from vehicle_frame in radians.',
+    )
+    velodyne_roll_arg = DeclareLaunchArgument(
+        'velodyne_roll',
+        default_value='0.0',
+        description='LiDAR roll offset from vehicle_frame in radians.',
+    )
 
     localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -56,7 +101,18 @@ def generate_launch_description():
             os.path.join(
                 auto_drive_share_dir, 'launch', 'planning_single_f9p.launch.py'
             )
-        )
+        ),
+        launch_arguments={
+            'publish_velodyne_tf': LaunchConfiguration('publish_velodyne_tf'),
+            'vehicle_frame': LaunchConfiguration('vehicle_frame'),
+            'velodyne_frame': LaunchConfiguration('velodyne_frame'),
+            'velodyne_x': LaunchConfiguration('velodyne_x'),
+            'velodyne_y': LaunchConfiguration('velodyne_y'),
+            'velodyne_z': LaunchConfiguration('velodyne_z'),
+            'velodyne_yaw': LaunchConfiguration('velodyne_yaw'),
+            'velodyne_pitch': LaunchConfiguration('velodyne_pitch'),
+            'velodyne_roll': LaunchConfiguration('velodyne_roll'),
+        }.items(),
     )
 
     control_launch = IncludeLaunchDescription(
@@ -97,6 +153,15 @@ def generate_launch_description():
             rviz_config_arg,
             use_serial_bridge_arg,
             serial_port_arg,
+            publish_velodyne_tf_arg,
+            vehicle_frame_arg,
+            velodyne_frame_arg,
+            velodyne_x_arg,
+            velodyne_y_arg,
+            velodyne_z_arg,
+            velodyne_yaw_arg,
+            velodyne_pitch_arg,
+            velodyne_roll_arg,
             localization_launch,
             planning_launch,
             control_launch,

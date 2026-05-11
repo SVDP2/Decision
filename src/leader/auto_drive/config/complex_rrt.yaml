@@ -2,7 +2,11 @@ complex_rrt_planner_node:
   ros__parameters:
     planning_frame: "vehicle_ref"
     cone_pose_array_topic: "/complex/cones"
-    cone_marker_topic: "/detected_objects_center"
+    cone_marker_topic: "/detected_objects"
+    object_marker_namespace: "objects"
+    label_marker_namespace: "info"
+    label_id_offset: 10000
+    cone_label_names: "cone,traffic_cone"
     target_topic: "/complex/rrt_target"
     predicted_obstacle_topic: "/complex/predicted_obstacles"
     local_path_topic: "/complex/local_path"

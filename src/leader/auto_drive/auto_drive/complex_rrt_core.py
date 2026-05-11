@@ -18,6 +18,32 @@ def wrap_to_pi(angle):
     return angle
 
 
+def normalize_detection_label(text):
+    lines = str(text or '').strip().splitlines()
+    if not lines:
+        return ''
+    label = lines[0].strip().lower()
+    return label.split('(', 1)[0].strip()
+
+
+def parse_label_names(text):
+    labels = set()
+    for item in str(text or '').split(','):
+        normalized = item.strip().lower()
+        if normalized:
+            labels.add(normalized)
+    return labels or {'cone'}
+
+
+def detection_object_ids_for_labels(label_items, label_id_offset, label_names):
+    accepted_labels = set(label_names or {'cone'})
+    return {
+        int(marker_id) - int(label_id_offset)
+        for marker_id, marker_text in label_items
+        if normalize_detection_label(marker_text) in accepted_labels
+    }
+
+
 @dataclass(frozen=True)
 class Obstacle:
     x: float

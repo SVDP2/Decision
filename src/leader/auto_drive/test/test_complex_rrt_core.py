@@ -4,6 +4,9 @@ import unittest
 
 from auto_drive.complex_rrt_core import RrtPlanner
 from auto_drive.complex_rrt_core import RrtPlannerConfig
+from auto_drive.complex_rrt_core import detection_object_ids_for_labels
+from auto_drive.complex_rrt_core import normalize_detection_label
+from auto_drive.complex_rrt_core import parse_label_names
 
 
 class ComplexRrtCoreTest(unittest.TestCase):
@@ -44,6 +47,25 @@ class ComplexRrtCoreTest(unittest.TestCase):
 
         self.assertEqual(result.reason, 'target_not_forward')
         self.assertEqual(result.path_points, [])
+
+    def test_detected_object_label_matching_extracts_cones(self):
+        label_names = parse_label_names('cone,traffic_cone')
+
+        object_ids = detection_object_ids_for_labels(
+            [
+                (10000, 'Cone\n(0.74)'),
+                (10001, 'Car\n(0.92)'),
+                (10002, 'traffic_cone\n(0.65)'),
+            ],
+            10000,
+            label_names,
+        )
+
+        self.assertEqual(object_ids, {0, 2})
+
+    def test_normalize_detection_label_uses_first_line(self):
+        self.assertEqual(normalize_detection_label('Cone\n(0.74)'), 'cone')
+        self.assertEqual(normalize_detection_label('Cone (0.74)'), 'cone')
 
 
 if __name__ == '__main__':

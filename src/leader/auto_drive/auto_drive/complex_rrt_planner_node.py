@@ -21,6 +21,8 @@ from tf2_ros import TransformListener
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
+from auto_drive.complex_rrt_core import detection_object_ids_for_labels
+from auto_drive.complex_rrt_core import parse_label_names
 from auto_drive.complex_rrt_core import RrtPlanner
 from auto_drive.complex_rrt_core import RrtPlannerConfig
 
@@ -69,12 +71,26 @@ class ComplexRrtPlannerNode(Node):
         self.planning_frame = self.declare_parameter(
             'planning_frame', 'vehicle_ref'
         ).value
-        self.cone_pose_array_topic = self.declare_parameter(  #cone 토픽명
+        self.cone_pose_array_topic = self.declare_parameter(
             'cone_pose_array_topic', '/complex/cones'
         ).value
         self.cone_marker_topic = self.declare_parameter(
-            'cone_marker_topic', '/detected_objects_center'
+            'cone_marker_topic', '/detected_objects'
         ).value
+        self.object_marker_namespace = self.declare_parameter(
+            'object_marker_namespace', 'objects'
+        ).value
+        self.label_marker_namespace = self.declare_parameter(
+            'label_marker_namespace', 'info'
+        ).value
+        self.label_id_offset = int(
+            self.declare_parameter('label_id_offset', 10000).value
+        )
+        self.cone_label_names = parse_label_names(
+            self.declare_parameter(
+                'cone_label_names', 'cone,traffic_cone'
+            ).value
+        )
         self.target_topic = self.declare_parameter(
             'target_topic', '/complex/rrt_target'
         ).value
@@ -231,10 +247,19 @@ class ComplexRrtPlannerNode(Node):
         self.latest_cone_stamp_sec = self.now_sec()
 
     def cone_marker_callback(self, msg: MarkerArray):
+        cone_object_ids = self.find_labeled_cone_ids(msg)
         cones = []
         for marker in msg.markers:
-            if marker.action == Marker.DELETE:
+            if marker.action in (Marker.DELETE, Marker.DELETEALL):
                 continue
+            if cone_object_ids is not None:
+                if marker.ns != self.object_marker_namespace:
+                    continue
+                if marker.id not in cone_object_ids:
+                    continue
+            elif marker.ns == self.label_marker_namespace:
+                continue
+
             point = self.transform_point(
                 marker.pose.position.x,
                 marker.pose.position.y,
@@ -244,6 +269,23 @@ class ComplexRrtPlannerNode(Node):
                 cones.append(point)
         self.latest_cones = cones
         self.latest_cone_stamp_sec = self.now_sec()
+
+    def find_labeled_cone_ids(self, msg: MarkerArray):
+        label_items = []
+        for marker in msg.markers:
+            if marker.action in (Marker.DELETE, Marker.DELETEALL):
+                continue
+            if marker.ns != self.label_marker_namespace:
+                continue
+
+            label_items.append((marker.id, marker.text))
+
+        if not label_items:
+            return None
+
+        return detection_object_ids_for_labels(
+            label_items, self.label_id_offset, self.cone_label_names
+        )
 
     def target_callback(self, msg: PointStamped):
         point = self.transform_point(

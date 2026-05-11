@@ -179,7 +179,7 @@ Check:
 Expected flow:
 
   /complex/rrt_target
-  /complex/cones or /detected_objects_center
+  /complex/cones or /detected_objects
     -> complex_rrt_planner_node
     -> /complex/local_path
     -> complex_pure_pursuit_node
@@ -242,6 +242,35 @@ Expected:
 - Complex: /complex/local_path passes between cone obstacles.
 
 
+8-1. Velodyne TF Check
+----------------------
+If /detected_objects marker.header.frame_id is velodyne, RRT needs this TF:
+
+  vehicle_ref -> velodyne
+
+Default launch publishes an identity static TF. Override it with measured LiDAR
+mounting values when the LiDAR origin is not the same as vehicle_ref:
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/path/to/path.csv \
+    velodyne_x:=0.0 velodyne_y:=0.0 velodyne_z:=0.0 \
+    velodyne_yaw:=0.0 velodyne_pitch:=0.0 velodyne_roll:=0.0
+
+If another LiDAR launch already publishes vehicle_ref -> velodyne:
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/path/to/path.csv \
+    publish_velodyne_tf:=false
+
+Check:
+
+  ros2 run tf2_ros tf2_echo vehicle_ref velodyne
+
+Pass condition:
+- tf2_echo prints a transform without lookup/extrapolation errors.
+- /complex/rrt_obstacles appears at the same x/y position as cone objects.
+
+
 9. Common Failure Cases
 -----------------------
 Case: /complex/rrt_status = missing_target
@@ -252,7 +281,11 @@ Case: /complex/rrt_status = missing_target
 Case: /complex/rrt_status = missing_cones
 - No cone input.
 - Publish /complex/cones manually.
-- Or connect LiDAR perception to /detected_objects_center.
+- Or connect LiDAR perception to /detected_objects.
+- For /detected_objects MarkerArray, check that each cone has:
+  - ns=objects, id=N, pose.position as center
+  - ns=info, id=10000+N, text first line as Cone
+  - object frame such as velodyne must be TF-transformable to vehicle_ref
 
 Case: /planning_command_source = highway while expecting complex
 - Check /drive_context.
