@@ -15,7 +15,7 @@ complex_rrt_planner_node:
     obstacle_marker_topic: "/complex/rrt_obstacles"
     path_marker_topic: "/complex/local_path_marker"
     plan_rate_hz: 8.0
-    cone_timeout_sec: 0.7
+    cone_timeout_sec: 1.5
     target_timeout_sec: 0.7
     random_seed: 0
     plan_distance: 5.0

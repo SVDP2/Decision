@@ -205,7 +205,7 @@ class ComplexRrtPlannerNode(Node):
             MarkerArray, self.cone_marker_topic, self.cone_marker_callback, 10
         )
         self.create_subscription(
-            PointStamped, self.target_topic, self.target_callback, 10
+            PointStamped, self.target_topic, self.target_callback, TRANSIENT_QOS
         )
         self.create_subscription(
             MarkerArray,
