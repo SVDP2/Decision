@@ -21,6 +21,15 @@ ros2 launch auto_drive bringup_single_f9p.launch.py \
   velodyne_frame:=velodyne
 ```
 
+
+- home test
+```
+ros2 launch auto_drive bringup_single_f9p.launch.py \
+  use_serial_bridge:=false \
+  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_05_17-15_57_12.csv
+  velodyne_frame:=velodyne
+```
+
 - 토픽,TF 확인
 
 ros2 topic echo /vehicle_heading_valid

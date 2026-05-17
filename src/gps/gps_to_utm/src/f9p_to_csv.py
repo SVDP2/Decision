@@ -16,7 +16,7 @@ def get_ros2_msg_type(bag_reader, topic_name):
 
 def main():
     # --- 경로 직접 지정 ---
-    bag_path = "/home/yoo/GP_Decision/bag/rosbag2_2026_03_29-17_44_57"
+    bag_path = "/home/yoo/GP_Decision/bag/rosbag2_2026_05_17-15_57_12"
     
     # bag_path에서 파일 이름 추출하여 CSV 경로 생성
     bag_filename = os.path.basename(bag_path)
@@ -24,7 +24,7 @@ def main():
     csv_path = os.path.join("/home/yoo/GP_Decision/config/path_csv", csv_filename)
     # ---------------------
 
-    topic_name = "/ublox_gps_node/fix"
+    topic_name = "/f9p/fix"
 
     print(f"Input bag path: {bag_path}")
     print(f"Output CSV path: {csv_path}")
