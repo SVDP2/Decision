@@ -33,7 +33,9 @@ ros2 run tf2_ros tf2_echo csv vehicle_ref
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=true \
   serial_port:=/dev/ttyACM0 \
-  csv_file_path:= /home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
+  csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv \
+  velodyne_frame:=velodyne
+
 
 ros2 launch ntrip_client ntrip_client_launch.py
 
