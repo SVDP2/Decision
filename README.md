@@ -17,7 +17,8 @@ ros2 launch gps_to_utm tf_gps_csv.launch.py
 ```
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=false \
-  csv_file_path:=/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
+  csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
+  velodyne_frame:=velodyne
 ```
 
 - 토픽,TF 확인
@@ -32,13 +33,15 @@ ros2 run tf2_ros tf2_echo csv vehicle_ref
 ros2 launch auto_drive bringup_single_f9p.launch.py \
   use_serial_bridge:=true \
   serial_port:=/dev/ttyACM0 \
-  csv_file_path:= csv 경로
+  csv_file_path:= /home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv
+
+ros2 launch ntrip_client ntrip_client_launch.py
 
 
 
 
+## 현재 구현 범위ros2 launch ntrip_client ntrip_client_launch.py
 
-## 현재 구현 범위
 
 - 구현 완료
   - single F9P 기반 Highway형 GPS path 추종 체인
