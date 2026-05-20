@@ -13,6 +13,8 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>ackermann_msgs</exec_depend>
+  <exec_depend>platoon_interfaces</exec_depend>
+  <exec_depend>platoon_v2v</exec_depend>
   <exec_depend>python3-serial</exec_depend>
 
   <test_depend>ament_copyright</test_depend>

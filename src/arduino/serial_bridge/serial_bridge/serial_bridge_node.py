@@ -7,6 +7,9 @@ import rclpy
 import serial
 from ackermann_msgs.msg import AckermannDrive
 from geometry_msgs.msg import TwistWithCovarianceStamped
+from platoon_interfaces.msg import LeaderDriveTelemetry
+from platoon_v2v.telemetry_protocol import LeaderTelemetryFrame
+from platoon_v2v.telemetry_protocol import LeaderTelemetryStreamParser
 from rclpy.node import Node
 from serial import SerialException
 from std_msgs.msg import Bool
@@ -28,7 +31,10 @@ class SerialBridgeNode(Node):
             'steer_topic', '/auto_steer_angle'
         ).value
         self.go_topic = self.declare_parameter('go_topic', '/go').value
-        self.port_name = self.declare_parameter('port', '/dev/ttyACM2').value
+        self.drive_telemetry_topic = self.declare_parameter(
+            'drive_telemetry_topic', '/leader/drive_telemetry'
+        ).value
+        self.port_name = self.declare_parameter('port', '/dev/ttyACM0').value
         self.baudrate = int(self.declare_parameter('baud', 115200).value)
         self.tx_period_sec = float(
             self.declare_parameter('tx_period_sec', 0.067).value
@@ -63,11 +69,17 @@ class SerialBridgeNode(Node):
         self.rx_sync_drop_count = 0
         self.rx_packet_crc_fail_count = 0
         self.rx_unpack_error_count = 0
+        self.rx_leader_telemetry_count = 0
+        self.latest_leader_telemetry_frame = None
         self.last_warned_crc_fail_count = 0
         self.last_bridge_warning_time = 0.0
+        self.telemetry_parser = LeaderTelemetryStreamParser()
 
         self.twist_msgs_pub = self.create_publisher(
             TwistWithCovarianceStamped, '/encoder/twist', 10
+        )
+        self.drive_telemetry_pub = self.create_publisher(
+            LeaderDriveTelemetry, self.drive_telemetry_topic, 10
         )
 
         self.configure_subscriptions()
@@ -169,11 +181,15 @@ class SerialBridgeNode(Node):
     def bridge_cmd_ok_count(self):
         if not self.expect_bridge_debug_counters:
             return None
+        if self.latest_leader_telemetry_frame is not None:
+            return int(self.latest_leader_telemetry_frame.bridge_rx_ok_count)
         return max(0, int(round(self.auto_speed)))
 
     def bridge_crc_fail_count(self):
         if not self.expect_bridge_debug_counters:
             return None
+        if self.latest_leader_telemetry_frame is not None:
+            return int(self.latest_leader_telemetry_frame.bridge_crc_fail_count)
         return max(0, int(round(self.auto_angle)))
 
     def convert_to_nav_msgs(self, speed, angle):
@@ -193,6 +209,42 @@ class SerialBridgeNode(Node):
             0.0, 0.0, 0.0, 0.0, 0.0, 0.05,
         ]
         self.twist_msgs_pub.publish(twist_stamped)
+
+    def publish_drive_telemetry(self, frame: LeaderTelemetryFrame):
+        msg = LeaderDriveTelemetry()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'leader/base_link'
+        msg.seq = int(frame.seq)
+        msg.boot_id = int(frame.boot_id)
+        msg.drive_mode = int(frame.drive_mode)
+        msg.source = int(frame.source)
+        msg.rc_valid = bool(frame.rc_valid)
+        msg.rc_failsafe = bool(frame.rc_failsafe)
+        msg.auto_valid = bool(frame.auto_valid)
+        msg.auto_failsafe = bool(frame.auto_failsafe)
+        msg.stop_required = bool(frame.stop_required)
+        msg.rc_throttle_us = int(frame.rc_throttle_us)
+        msg.rc_steer_us = int(frame.rc_steer_us)
+        msg.rc_mode_us = int(frame.rc_mode_us)
+        msg.throttle_norm = float(frame.throttle_norm)
+        msg.throttle_cmd_pwm = float(frame.throttle_cmd_pwm)
+        msg.throttle_output_pwm = float(frame.throttle_output_pwm)
+        msg.steering_target_adc = float(frame.steering_target_adc)
+        msg.steering_current_adc = float(frame.steering_current_adc)
+        msg.steering_angle_rad = float(frame.steering_angle_rad)
+        msg.speed_estimate_mps = float(frame.speed_estimate_mps)
+        msg.auto_speed_cmd_mps = float(frame.auto_speed_cmd_mps)
+        msg.auto_steering_cmd_rad = float(frame.auto_steering_cmd_rad)
+        msg.arduino_time_ms = int(frame.arduino_time_ms)
+        msg.bridge_rx_ok_count = int(frame.bridge_rx_ok_count)
+        msg.bridge_crc_fail_count = int(frame.bridge_crc_fail_count)
+        self.drive_telemetry_pub.publish(msg)
+
+    def handle_leader_telemetry_bytes(self, data: bytes):
+        for frame in self.telemetry_parser.feed(data):
+            self.rx_leader_telemetry_count += 1
+            self.latest_leader_telemetry_frame = frame
+            self.publish_drive_telemetry(frame)
 
     def send_serial_data(self):
         if self.serial_port is None:
@@ -243,7 +295,11 @@ class SerialBridgeNode(Node):
             self.last_bridge_warning_time = now
             return
 
-        if self.rx_raw_byte_count > 0 and self.rx_status_packet_count == 0:
+        if (
+            self.rx_raw_byte_count > 0
+            and self.rx_status_packet_count == 0
+            and self.rx_leader_telemetry_count == 0
+        ):
             self.get_logger().warn(
                 'Raw bytes are arriving from Arduino, but no valid status '
                 'packet has been decoded yet. Check packet sync/CRC and '
@@ -295,6 +351,10 @@ class SerialBridgeNode(Node):
             '[AUTO]  | '
             f'SPEED: {self.auto_speed:>6.2f} | '
             f'ANGLE: {self.auto_angle:>6.2f}',
+            '[V2V]   | '
+            f'TELEMETRY_RX: {self.rx_leader_telemetry_count:>6} | '
+            f'SYNC_DROP: {self.telemetry_parser.sync_drop_count:>6} | '
+            f'CRC: {self.telemetry_parser.crc_fail_count:>6}',
         ]
 
         if self.expect_bridge_debug_counters:
@@ -333,6 +393,7 @@ class SerialBridgeNode(Node):
                 if self.serial_port.in_waiting:
                     data = self.serial_port.read(self.serial_port.in_waiting)
                     self.rx_raw_byte_count += len(data)
+                    self.handle_leader_telemetry_bytes(data)
                     buffer.extend(data)
 
                 while len(buffer) >= packet_size:
