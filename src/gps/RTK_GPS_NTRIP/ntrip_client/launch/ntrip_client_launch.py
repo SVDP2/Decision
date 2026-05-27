@@ -2,7 +2,6 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch.substitutions import EnvironmentVariable
 from launch.actions import SetEnvironmentVariable
 
 def generate_launch_description():
@@ -10,21 +9,24 @@ def generate_launch_description():
           # Declare arguments with default values
           # RTCM mavros_msgs
  
-          DeclareLaunchArgument('host',                  default_value='www.gnssdata.or.kr'),
+          DeclareLaunchArgument('host',                  default_value='gnss.eseoul.go.kr'),
           DeclareLaunchArgument('port',                  default_value='2101'),
-          DeclareLaunchArgument('mountpoint',            default_value='SUWN-RTCM31'),  # SONP-RTCM23   SONP-RTCM31   SONP-RTCM32  SUWN-RTCM23   SUWN-RTCM31   SUWN-RTCM32   SUWN-BINEX
-          DeclareLaunchArgument('ntrip_version',         default_value='None'),
+          DeclareLaunchArgument('mountpoint',            default_value='SUWN-RTCM32'),  # SONP-RTCM23   SONP-RTCM31   SONP-RTCM32  SUWN-RTCM23   SUWN-RTCM31   SUWN-RTCM32   SUWN-BINEX
+          DeclareLaunchArgument('ntrip_version',         default_value='Ntrip/2.0'),
           DeclareLaunchArgument('authenticate',          default_value='True'),
-          DeclareLaunchArgument('username',              default_value='smzzang21@konkuk.ac.kr'),
-          DeclareLaunchArgument('password',              default_value='gnss'),
+          DeclareLaunchArgument('username',              default_value='seoul'),
+          DeclareLaunchArgument('password',              default_value='seoul'),
           DeclareLaunchArgument('ssl',                   default_value='False'),
           DeclareLaunchArgument('cert',                  default_value='None'),
           DeclareLaunchArgument('key',                   default_value='None'),
           DeclareLaunchArgument('ca_cert',               default_value='None'),
           DeclareLaunchArgument('debug',                 default_value='true'),
           DeclareLaunchArgument('rtcm_message_package',  default_value='rtcm_msgs'),
+          DeclareLaunchArgument('ros_domain_id',         default_value='42'),
+          DeclareLaunchArgument('ntrip_namespace',       default_value='leader/ntrip_client'),
 
           # Pass an environment variable to the node
+          SetEnvironmentVariable(name='ROS_DOMAIN_ID', value=LaunchConfiguration('ros_domain_id')),
           SetEnvironmentVariable(name='NTRIP_CLIENT_DEBUG', value=LaunchConfiguration('debug')),
 
           # ******************************************************************
@@ -32,7 +34,7 @@ def generate_launch_description():
           # ******************************************************************
           Node(
                 name='ntrip_client_node',
-                namespace='ntrip_client',
+                namespace=LaunchConfiguration('ntrip_namespace'),
                 package='ntrip_client',
                 executable='ntrip_ros.py',
                 parameters=[

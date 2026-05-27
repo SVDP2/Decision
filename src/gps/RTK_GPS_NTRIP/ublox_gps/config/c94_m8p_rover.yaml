@@ -9,7 +9,7 @@ ublox_gps_node:
       device: 4                 # Save to EEPROM
 
     device: /dev/ttyACM0
-    frame_id: gps
+    frame_id: leader/leader_gps
     rate: 1.0                   # in Hz
     nav_rate: 1                 # [# of measurement cycles], recommended 1 Hz, may
                                 # be either 5 Hz (Dual constellation) or
@@ -34,7 +34,7 @@ ublox_gps_node:
     uart1:
       baudrate: 19200           # C94-M8P specific
       in: 32                    # RTCM 3
-      out: 0                    # No UART out for rover
+      out: 0                  # No UART out for rover
 
     gnss:
       glonass: true             # Supported by C94-M8P
