@@ -61,7 +61,7 @@
     csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_05_17-15_57_12.csv \
     use_serial_bridge:=false \
     use_rviz:=true \
-    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex_debug.rviz \
+    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex.rviz \
     publish_velodyne_tf:=true \
     velodyne_frame:=velodyne
 
@@ -142,7 +142,7 @@
   ros2 launch auto_drive bringup_single_f9p.launch.py \
     csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_05_17-15_57_12.csv \
     use_rviz:=true \
-    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex_debug.rviz \
+    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex.rviz \
     publish_velodyne_tf:=true \
     velodyne_frame:=velodyne \
     use_serial_bridge:=true 
