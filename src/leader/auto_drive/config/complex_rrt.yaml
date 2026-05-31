@@ -18,16 +18,16 @@ complex_rrt_planner_node:
     cone_timeout_sec: 1.5
     target_timeout_sec: 0.7
     random_seed: 0
-    plan_distance: 5.0
-    expand_distance: 0.4
+    plan_distance: 4.0
+    expand_distance: 0.35
     turn_angle_deg: 20.0
-    max_iterations: 700
-    goal_tolerance: 0.8
+    max_iterations: 1000
+    goal_tolerance: 0.7
     target_sample_probability: 0.75
     target_sample_radius: 1.0
     random_sample_x_min: 0.0
-    random_sample_x_max: 7.0
-    random_sample_y_abs: 1.5
+    random_sample_x_max: 5.0
+    random_sample_y_abs: 1.8
     cone_radius: 0.35
     predicted_obstacle_radius: 0.6
     min_obstacle_x: -0.5

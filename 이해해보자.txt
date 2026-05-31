@@ -37,3 +37,112 @@
 
 7. serial_bridge가 최종 명령을 아두이노로.
     - /throttle_cmd와 /auto_steer angle을 구독하여 아두이노가 사용할 수 있도록.
+
+
+
+
+
+
+
+
+----------------------------------------------------------
+
+• 1. 실행 명령어
+
+  빌드/소스:
+
+  cd /home/kai/dc_ws/GP_Decision
+  colcon build --symlink-install --packages-select gps_to_utm auto_drive
+  source install/setup.bash
+
+  Complex RViz 포함 bringup:
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_05_17-15_57_12.csv \
+    use_serial_bridge:=false \
+    use_rviz:=true \
+    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex_debug.rviz \
+    publish_velodyne_tf:=true \
+    velodyne_frame:=velodyne
+
+  Complex 모드 전환:
+
+  ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+
+  상태 확인:
+
+  ros2 topic echo /complex/rrt_status
+  ros2 topic echo /planning_command_source
+  ros2 topic echo /complex/local_path
+  ros2 topic echo /complex/auto_steer_angle
+  ros2 topic echo /complex/throttle_from_planning
+
+  GPS/TF 없이 RRT만 테스트할 때:
+
+  ros2 topic pub /complex/rrt_target geometry_msgs/msg/PointStamped "{
+    header: {frame_id: 'vehicle_ref'},
+    point: {x: 4.0, y: 0.0, z: 0.0}
+  }" -r 10
+
+  ros2 topic pub /complex/cones geometry_msgs/msg/PoseArray "{
+    header: {frame_id: 'vehicle_ref'},
+    poses: [
+      {position: {x: 2.0, y: 1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 3.5, y: 1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 2.0, y: -1.0, z: 0.0}, orientation: {w: 1.0}},
+      {position: {x: 3.5, y: -1.0, z: 0.0}, orientation: {w: 1.0}}
+    ]
+  }" -r 10
+
+  2. 추천 디버깅 파라미터
+
+  처음에는 짧고 안정적으로 보는 게 좋습니다.
+
+  src/leader/auto_drive/config/complex_target.yaml:10:
+
+  target_distance_m: 4.0
+  max_target_abs_y: 4.0
+
+  src/leader/auto_drive/config/complex_rrt.yaml:21:
+
+  plan_distance: 4.0
+  expand_distance: 0.35
+  turn_angle_deg: 25.0
+  max_iterations: 1000
+  goal_tolerance: 0.7
+  target_sample_probability: 0.75
+  target_sample_radius: 1.0
+  random_sample_x_max: 5.0
+  random_sample_y_abs: 1.8
+  cone_radius: 0.35
+  cone_timeout_sec: 1.5
+  target_timeout_sec: 1.0
+  allow_direct_path: true
+  require_cones: true
+
+  디버깅 목적별로는:
+
+  # cone 없을 때도 GPS target 방향으로 진행 확인
+  require_cones: false
+
+  # RRT tree를 재현 가능하게 보고 싶을 때
+  random_seed: 1
+
+  # cone 회피 여유가 너무 작으면
+  cone_radius: 0.45
+
+  # 장애물이 커서 경로가 안 나오면
+  cone_radius: 0.25
+  random_sample_y_abs: 2.5
+  max_iterations: 1500
+
+  주의할 점은 이 파라미터들은 현재 런타임 동적 반영 구조가 아니라서, YAML 수정 후 launch를 다시 시작
+  하는 방식으로 보는 게 맞습니다.
+
+  ros2 launch auto_drive bringup_single_f9p.launch.py \
+    csv_file_path:=/home/kai/dc_ws/GP_Decision/config/path_csv/rosbag2_2026_05_17-15_57_12.csv \
+    use_rviz:=true \
+    rviz_config:=/home/kai/dc_ws/GP_Decision/src/leader/auto_drive/config/complex_debug.rviz \
+    publish_velodyne_tf:=true \
+    velodyne_frame:=velodyne \
+    use_serial_bridge:=true 

@@ -34,7 +34,7 @@ class SerialBridgeNode(Node):
         self.drive_telemetry_topic = self.declare_parameter(
             'drive_telemetry_topic', '/leader/drive_telemetry'
         ).value
-        self.port_name = self.declare_parameter('port', '/dev/ttyACM0').value
+        self.port_name = self.declare_parameter('port', '/dev/ttyACM1').value
         self.baudrate = int(self.declare_parameter('baud', 115200).value)
         self.tx_period_sec = float(
             self.declare_parameter('tx_period_sec', 0.067).value

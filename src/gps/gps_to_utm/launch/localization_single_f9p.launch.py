@@ -7,14 +7,14 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-DEFAULT_CSV_PATH = (
-    '/Users/yoosm/FinalProject/GP_Decision/config/path_csv/'
-    'rosbag2_2026_03_14-16_23_49.csv'
-)
-
-
 def generate_launch_description():
     gps_to_utm_share_dir = get_package_share_directory('gps_to_utm')
+    default_csv_path = os.path.join(
+        gps_to_utm_share_dir,
+        'config',
+        'path_csv',
+        'rosbag2_2026_03_30.csv',
+    )
     heading_params = os.path.join(
         gps_to_utm_share_dir, 'config', 'single_f9p_heading.yaml'
     )
@@ -23,7 +23,7 @@ def generate_launch_description():
     )
 
     csv_file_arg = DeclareLaunchArgument(
-        'csv_file_path', default_value=DEFAULT_CSV_PATH
+        'csv_file_path', default_value=default_csv_path
     )
 
     f9p_to_utm_node = Node(

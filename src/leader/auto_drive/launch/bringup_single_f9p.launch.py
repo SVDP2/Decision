@@ -10,20 +10,21 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-DEFAULT_CSV_PATH = (
-    '/home/yoo/GP_Decision/config/path_csv/rosbag2_2026_03_30.csv'
-)
-
-
 def generate_launch_description():
     auto_drive_share_dir = get_package_share_directory('auto_drive')
     gps_to_utm_share_dir = get_package_share_directory('gps_to_utm')
+    default_csv_path = os.path.join(
+        gps_to_utm_share_dir,
+        'config',
+        'path_csv',
+        'rosbag2_2026_03_30.csv',
+    )
     default_rviz_config = os.path.join(
         auto_drive_share_dir, 'config', 'single_f9p_debug.rviz'
     )
 
     csv_file_arg = DeclareLaunchArgument(
-        'csv_file_path', default_value=DEFAULT_CSV_PATH
+        'csv_file_path', default_value=default_csv_path
     )
     use_rviz_arg = DeclareLaunchArgument(
         'use_rviz', default_value='true'
@@ -35,7 +36,7 @@ def generate_launch_description():
         'use_serial_bridge', default_value='false'
     )
     serial_port_arg = DeclareLaunchArgument(
-        'serial_port', default_value='/dev/ttyACM0'
+        'serial_port', default_value='/dev/ttyACM1'
     )
     publish_velodyne_tf_arg = DeclareLaunchArgument(
         'publish_velodyne_tf',
