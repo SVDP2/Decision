@@ -45,7 +45,8 @@ complex_rrt_planner_node:
     corridor_both_sides_reward: 3.0
     corridor_one_side_penalty: 3.0
     corridor_min_branch_score: 60.0
-    corridor_edge_max_length: 7.0
-    corridor_edge_max_parts_ratio: 3.0
+    corridor_edge_max_length: 4.0
+    corridor_edge_max_parts_ratio: 2.0
+    corridor_waypoint_spacing: 0.7
     corridor_min_waypoints: 1
     corridor_append_branch_endpoint: false

@@ -79,6 +79,7 @@ class RrtPlannerConfig:
     corridor_min_branch_score: float = 60.0
     corridor_edge_max_length: float = 7.0
     corridor_edge_max_parts_ratio: float = 3.0
+    corridor_waypoint_spacing: float = 0.7
     corridor_min_waypoints: int = 1
     corridor_append_branch_endpoint: bool = False
 
@@ -303,9 +304,9 @@ class RrtPlanner:
 
         branch_index, branch_score = branch
         best_branch_points = self._extract_path(nodes, branch_index)
-        cone_edges = self._build_cone_edges(cones)
-        corridor_waypoints = self._waypoints_from_branch_edges(
-            best_branch_points, cone_edges
+        candidate_cone_edges = self._build_cone_edges(cones)
+        corridor_waypoints, selected_cone_edges = self._waypoints_from_branch_edges(
+            best_branch_points, candidate_cone_edges
         )
 
         if len(corridor_waypoints) >= max(int(cfg.corridor_min_waypoints), 1):
@@ -330,7 +331,7 @@ class RrtPlanner:
             tree_edges=tree_edges,
             obstacles=obstacles,
             best_branch_points=best_branch_points,
-            cone_edges=cone_edges,
+            cone_edges=selected_cone_edges,
             corridor_waypoints=corridor_waypoints,
             branch_score=branch_score,
             reason=reason,
@@ -424,10 +425,11 @@ class RrtPlanner:
 
     def _waypoints_from_branch_edges(self, branch_points, cone_edges):
         if len(branch_points) < 2 or not cone_edges:
-            return []
+            return [], []
 
         cfg = self.config
-        waypoint_items_by_edge = {}
+        waypoint_items_by_bin = {}
+        spacing = max(cfg.corridor_waypoint_spacing, cfg.path_resolution, 0.05)
         accumulated = 0.0
         for start, end in zip(branch_points, branch_points[1:]):
             segment_length = math.hypot(end[0] - start[0], end[1] - start[1])
@@ -435,6 +437,10 @@ class RrtPlanner:
                 continue
 
             for edge_start, edge_end in cone_edges:
+                edge_length = math.hypot(
+                    edge_start[0] - edge_end[0],
+                    edge_start[1] - edge_end[1],
+                )
                 if not self._segments_intersect(
                     start, end, edge_start, edge_end
                 ):
@@ -457,10 +463,8 @@ class RrtPlanner:
                 shorter = min(first_part, second_part)
                 if shorter <= 1e-6:
                     continue
-                if (
-                    max(first_part, second_part) / shorter
-                    > cfg.corridor_edge_max_parts_ratio
-                ):
+                parts_ratio = max(first_part, second_part) / shorter
+                if parts_ratio > cfg.corridor_edge_max_parts_ratio:
                     continue
 
                 midpoint = (
@@ -471,18 +475,31 @@ class RrtPlanner:
                     intersection[0] - start[0],
                     intersection[1] - start[1],
                 )
-                edge_key = tuple(sorted((edge_start, edge_end)))
-                current = waypoint_items_by_edge.get(edge_key)
-                if current is None or along < current[0]:
-                    waypoint_items_by_edge[edge_key] = (along, midpoint)
+                midpoint_error = self._point_to_segment_distance(
+                    midpoint, start, end
+                )
+                score = midpoint_error + 0.03 * edge_length + 0.1 * (
+                    parts_ratio - 1.0
+                )
+                bin_key = round(along / spacing)
+                item = (
+                    along,
+                    midpoint,
+                    (edge_start, edge_end),
+                    score,
+                )
+                current = waypoint_items_by_bin.get(bin_key)
+                if current is None or score < current[3]:
+                    waypoint_items_by_bin[bin_key] = item
 
             accumulated += segment_length
 
-        waypoint_items = list(waypoint_items_by_edge.values())
+        waypoint_items = list(waypoint_items_by_bin.values())
         waypoint_items.sort(key=lambda item: item[0])
         waypoints = []
+        selected_edges = []
         seen_waypoints = set()
-        for _, waypoint in waypoint_items:
+        for _, waypoint, cone_edge, _ in waypoint_items:
             waypoint_key = (
                 round(waypoint[0] / max(cfg.path_resolution, 0.05)),
                 round(waypoint[1] / max(cfg.path_resolution, 0.05)),
@@ -496,7 +513,8 @@ class RrtPlanner:
                 continue
             seen_waypoints.add(waypoint_key)
             waypoints.append(waypoint)
-        return waypoints
+            selected_edges.append(cone_edge)
+        return waypoints, selected_edges
 
     def _sample_point(self, target, rng):
         cfg = self.config

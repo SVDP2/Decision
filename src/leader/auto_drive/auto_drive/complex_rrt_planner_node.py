@@ -225,6 +225,9 @@ class ComplexRrtPlannerNode(Node):
                     'corridor_edge_max_parts_ratio', 3.0
                 ).value
             ),
+            corridor_waypoint_spacing=float(
+                self.declare_parameter('corridor_waypoint_spacing', 0.7).value
+            ),
             corridor_min_waypoints=int(
                 self.declare_parameter('corridor_min_waypoints', 1).value
             ),
