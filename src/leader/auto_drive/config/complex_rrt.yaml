@@ -14,20 +14,23 @@ complex_rrt_planner_node:
     tree_marker_topic: "/complex/rrt_tree"
     obstacle_marker_topic: "/complex/rrt_obstacles"
     path_marker_topic: "/complex/local_path_marker"
+    best_branch_marker_topic: "/complex/rrt_best_branch"
+    cone_edges_marker_topic: "/complex/cone_edges"
+    corridor_waypoint_marker_topic: "/complex/corridor_waypoints"
     plan_rate_hz: 8.0
     cone_timeout_sec: 1.5
     target_timeout_sec: 0.7
     random_seed: 0
     plan_distance: 4.0
-    expand_distance: 0.35
+    expand_distance: 0.45
     turn_angle_deg: 20.0
     max_iterations: 1000
     goal_tolerance: 0.7
     target_sample_probability: 0.75
-    target_sample_radius: 1.0
+    target_sample_radius: 2.0
     random_sample_x_min: 0.0
     random_sample_x_max: 5.0
-    random_sample_y_abs: 1.8
+    random_sample_y_abs: 3.0
     cone_radius: 0.35
     predicted_obstacle_radius: 0.6
     min_obstacle_x: -0.5
@@ -35,5 +38,14 @@ complex_rrt_planner_node:
     max_obstacle_abs_y: 6.0
     min_target_x: 0.8
     path_resolution: 0.25
-    allow_direct_path: true
+    allow_direct_path: false
     require_cones: true
+    corridor_mode: true
+    corridor_cone_distance_limit: 4.0
+    corridor_both_sides_reward: 3.0
+    corridor_one_side_penalty: 3.0
+    corridor_min_branch_score: 60.0
+    corridor_edge_max_length: 7.0
+    corridor_edge_max_parts_ratio: 3.0
+    corridor_min_waypoints: 1
+    corridor_append_branch_endpoint: false

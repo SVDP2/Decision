@@ -112,6 +112,15 @@ class ComplexRrtPlannerNode(Node):
         self.path_marker_topic = self.declare_parameter(
             'path_marker_topic', '/complex/local_path_marker'
         ).value
+        self.best_branch_marker_topic = self.declare_parameter(
+            'best_branch_marker_topic', '/complex/rrt_best_branch'
+        ).value
+        self.cone_edges_marker_topic = self.declare_parameter(
+            'cone_edges_marker_topic', '/complex/cone_edges'
+        ).value
+        self.corridor_waypoint_marker_topic = self.declare_parameter(
+            'corridor_waypoint_marker_topic', '/complex/corridor_waypoints'
+        ).value
 
         self.plan_rate_hz = float(
             self.declare_parameter('plan_rate_hz', 8.0).value
@@ -183,6 +192,47 @@ class ComplexRrtPlannerNode(Node):
             require_cones=bool(
                 self.declare_parameter('require_cones', True).value
             ),
+            corridor_mode=bool(
+                self.declare_parameter('corridor_mode', False).value
+            ),
+            corridor_cone_distance_limit=float(
+                self.declare_parameter(
+                    'corridor_cone_distance_limit', 4.0
+                ).value
+            ),
+            corridor_both_sides_reward=float(
+                self.declare_parameter(
+                    'corridor_both_sides_reward', 3.0
+                ).value
+            ),
+            corridor_one_side_penalty=float(
+                self.declare_parameter(
+                    'corridor_one_side_penalty', 3.0
+                ).value
+            ),
+            corridor_min_branch_score=float(
+                self.declare_parameter(
+                    'corridor_min_branch_score', 60.0
+                ).value
+            ),
+            corridor_edge_max_length=float(
+                self.declare_parameter(
+                    'corridor_edge_max_length', 7.0
+                ).value
+            ),
+            corridor_edge_max_parts_ratio=float(
+                self.declare_parameter(
+                    'corridor_edge_max_parts_ratio', 3.0
+                ).value
+            ),
+            corridor_min_waypoints=int(
+                self.declare_parameter('corridor_min_waypoints', 1).value
+            ),
+            corridor_append_branch_endpoint=bool(
+                self.declare_parameter(
+                    'corridor_append_branch_endpoint', False
+                ).value
+            ),
         )
         self.planner = RrtPlanner(config)
 
@@ -226,6 +276,15 @@ class ComplexRrtPlannerNode(Node):
         )
         self.path_marker_pub = self.create_publisher(
             Marker, self.path_marker_topic, 10
+        )
+        self.best_branch_marker_pub = self.create_publisher(
+            Marker, self.best_branch_marker_topic, 10
+        )
+        self.cone_edges_marker_pub = self.create_publisher(
+            Marker, self.cone_edges_marker_topic, 10
+        )
+        self.corridor_waypoint_marker_pub = self.create_publisher(
+            Marker, self.corridor_waypoint_marker_topic, 10
         )
 
         self.timer = self.create_timer(
@@ -356,6 +415,9 @@ class ComplexRrtPlannerNode(Node):
         self.publish_tree(result.tree_edges)
         self.publish_obstacles(result.obstacles)
         self.publish_path_marker(result.path_points)
+        self.publish_best_branch_marker(result.best_branch_points)
+        self.publish_cone_edges_marker(result.cone_edges)
+        self.publish_corridor_waypoint_marker(result.corridor_waypoints)
         self.publish_status(result.reason)
 
     def missing_input_reason(self, now_sec):
@@ -382,6 +444,9 @@ class ComplexRrtPlannerNode(Node):
         self.publish_tree([])
         self.publish_obstacles([])
         self.publish_path_marker([])
+        self.publish_best_branch_marker([])
+        self.publish_cone_edges_marker([])
+        self.publish_corridor_waypoint_marker([])
         self.publish_status(reason)
 
     def publish_path(self, points):
@@ -465,6 +530,63 @@ class ComplexRrtPlannerNode(Node):
         for x, y in points:
             marker.points.append(make_point(x, y, 0.04))
         self.path_marker_pub.publish(marker)
+
+    def publish_best_branch_marker(self, points):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.planning_frame
+        marker.ns = 'complex_rrt_best_branch'
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD if points else Marker.DELETEALL
+        marker.scale.x = 0.08
+        marker.color.a = 0.9
+        marker.color.r = 1.0
+        marker.color.g = 0.9
+        marker.color.b = 0.0
+        marker.pose.orientation.w = 1.0
+        for x, y in points:
+            marker.points.append(make_point(x, y, 0.08))
+        self.best_branch_marker_pub.publish(marker)
+
+    def publish_cone_edges_marker(self, cone_edges):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.planning_frame
+        marker.ns = 'complex_cone_edges'
+        marker.id = 0
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD if cone_edges else Marker.DELETEALL
+        marker.scale.x = 0.035
+        marker.color.a = 0.65
+        marker.color.r = 0.0
+        marker.color.g = 0.9
+        marker.color.b = 1.0
+        marker.pose.orientation.w = 1.0
+        for start, end in cone_edges:
+            marker.points.append(make_point(start[0], start[1], 0.03))
+            marker.points.append(make_point(end[0], end[1], 0.03))
+        self.cone_edges_marker_pub.publish(marker)
+
+    def publish_corridor_waypoint_marker(self, points):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.planning_frame
+        marker.ns = 'complex_corridor_waypoints'
+        marker.id = 0
+        marker.type = Marker.SPHERE_LIST
+        marker.action = Marker.ADD if points else Marker.DELETEALL
+        marker.scale.x = 0.28
+        marker.scale.y = 0.28
+        marker.scale.z = 0.16
+        marker.color.a = 0.95
+        marker.color.r = 1.0
+        marker.color.g = 0.2
+        marker.color.b = 1.0
+        marker.pose.orientation.w = 1.0
+        for x, y in points:
+            marker.points.append(make_point(x, y, 0.1))
+        self.corridor_waypoint_marker_pub.publish(marker)
 
     def publish_status(self, status):
         if status != self.last_status:

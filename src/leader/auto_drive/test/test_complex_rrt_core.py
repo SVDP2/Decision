@@ -40,6 +40,44 @@ class ComplexRrtCoreTest(unittest.TestCase):
         for x, y in result.path_points:
             self.assertGreater(math.hypot(x - 3.0, y), config.cone_radius)
 
+    def test_corridor_mode_builds_midpoints_between_cones(self):
+        config = RrtPlannerConfig(
+            require_cones=True,
+            allow_direct_path=False,
+            corridor_mode=True,
+            plan_distance=4.0,
+            expand_distance=0.45,
+            max_iterations=1000,
+            cone_radius=0.3,
+            target_sample_probability=0.75,
+            target_sample_radius=2.0,
+            random_sample_x_max=5.0,
+            random_sample_y_abs=3.0,
+            path_resolution=0.25,
+        )
+        planner = RrtPlanner(config)
+        cones = [
+            (1.5, -1.0),
+            (2.5, -1.0),
+            (3.5, -1.0),
+            (1.5, 1.0),
+            (2.5, 1.0),
+            (3.5, 1.0),
+        ]
+
+        result = planner.plan(cones, (5.0, 0.0), rng=random.Random(1))
+
+        self.assertEqual(result.reason, 'corridor_midpoints')
+        self.assertGreaterEqual(len(result.corridor_waypoints), 3)
+        self.assertGreater(
+            result.branch_score, config.corridor_min_branch_score
+        )
+        self.assertIn((2.5, 0.0), result.corridor_waypoints)
+        for _, y in result.corridor_waypoints:
+            self.assertAlmostEqual(y, 0.0)
+        for _, y in result.path_points:
+            self.assertAlmostEqual(y, 0.0)
+
     def test_requires_forward_target(self):
         planner = RrtPlanner(RrtPlannerConfig(require_cones=False))
 
