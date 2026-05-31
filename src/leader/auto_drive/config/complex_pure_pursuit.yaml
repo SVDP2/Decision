@@ -7,8 +7,8 @@ complex_pure_pursuit_node:
     base_frame: "vehicle_ref"
     path_frame: "vehicle_ref"
     wheelbase: 0.724
-    min_lookahead: 1.8
-    max_lookahead: 3.0
+    min_lookahead: 1.2
+    max_lookahead: 2.2
     beta: 4.0
     curvature_window: 5
     curvature_ema_alpha: 0.7
