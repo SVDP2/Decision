@@ -104,6 +104,7 @@ def generate_launch_description():
             )
         ),
         launch_arguments={
+            'csv_file_path': LaunchConfiguration('csv_file_path'),
             'publish_velodyne_tf': LaunchConfiguration('publish_velodyne_tf'),
             'vehicle_frame': LaunchConfiguration('vehicle_frame'),
             'velodyne_frame': LaunchConfiguration('velodyne_frame'),

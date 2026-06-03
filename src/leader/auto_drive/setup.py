@@ -37,6 +37,7 @@ setup(
             'command_mux_node = auto_drive.command_mux_node:main',
             'mission_supervisor_node = '
             'auto_drive.mission_supervisor_node:main',
+            'mission_zone_node = auto_drive.mission_zone_node:main',
         ],
     },
 )

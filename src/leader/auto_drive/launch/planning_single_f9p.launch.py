@@ -26,6 +26,9 @@ def generate_launch_description():
     command_mux_params = os.path.join(
         auto_drive_share_dir, 'config', 'command_mux.yaml'
     )
+    mission_zone_params = os.path.join(
+        auto_drive_share_dir, 'config', 'mission_zones.yaml'
+    )
 
     publish_velodyne_tf = LaunchConfiguration('publish_velodyne_tf')
     velodyne_tf_node = Node(
@@ -100,8 +103,24 @@ def generate_launch_description():
         parameters=[command_mux_params],
     )
 
+    mission_zone_node = Node(
+        package='auto_drive',
+        executable='mission_zone_node',
+        name='mission_zone_node',
+        output='screen',
+        parameters=[
+            mission_zone_params,
+            {'csv_file_path': LaunchConfiguration('csv_file_path')},
+        ],
+    )
+
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                'csv_file_path',
+                default_value='',
+                description='UTM CSV path used for mission zone csv_index/range.',
+            ),
             DeclareLaunchArgument(
                 'publish_velodyne_tf',
                 default_value='true',
@@ -154,5 +173,6 @@ def generate_launch_description():
             complex_rrt_planner_node,
             complex_pure_pursuit_node,
             command_mux_node,
+            mission_zone_node,
         ]
     )

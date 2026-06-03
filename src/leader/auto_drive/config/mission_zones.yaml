@@ -1,0 +1,34 @@
+mission_zone_node:
+  ros__parameters:
+    vehicle_utm_topic: "/vehicle_ref_utm"
+    drive_context_topic: "/drive_context"
+    status_topic: "/mission_zone_status"
+    marker_topic: "/mission_zones"
+    csv_file_path: ""
+    csv_frame_id: "csv"
+    marker_publish_rate_hz: 2.0
+    context_latch_duration_sec: 2.0
+
+    # CSV row index is zero-based and uses the first two CSV columns as UTM x/y.
+    # Set enabled: true after choosing mission transition points.
+    zone_names: ["complex_start", "highway_resume"]
+
+    complex_start:
+      enabled: false
+      mode: "csv_index"
+      csv_index: 0
+      radius: 2.0
+      context: "complex"
+      once: true
+      enter_radius: -1.0
+      exit_radius: -1.0
+
+    highway_resume:
+      enabled: false
+      mode: "csv_index"
+      csv_index: 0
+      radius: 2.0
+      context: "highway"
+      once: true
+      enter_radius: -1.0
+      exit_radius: -1.0
