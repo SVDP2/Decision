@@ -1,6 +1,6 @@
 Panels:
   - Class: rviz_common/Displays
-    Help Height: 78
+    Help Height: 0
     Name: Displays
     Property Tree Widget:
       Expanded:
@@ -20,7 +20,7 @@ Panels:
         - /Complex Local Path1
         - /Complex Local Path Marker1
       Splitter Ratio: 0.5199999809265137
-    Tree Height: 420
+    Tree Height: 440
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -42,7 +42,7 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
-    - Alpha: 0.28
+    - Alpha: 0.2800000011920929
       Cell Size: 0.5
       Class: rviz_default_plugins/Grid
       Color: 110; 120; 130
@@ -120,7 +120,6 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Transient Local
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /safety_preemption_markers
@@ -131,14 +130,11 @@ Visualization Manager:
       Namespaces:
         complex_start_area: true
         complex_start_label: true
-        complex_start_range: true
         highway_resume_area: true
         highway_resume_label: true
-        highway_resume_range: true
       Topic:
         Depth: 5
         Durability Policy: Transient Local
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /mission_zones
@@ -175,7 +171,7 @@ Visualization Manager:
       Enabled: true
       Name: RRT Target
       Namespaces:
-        complex_rrt_target: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Transient Local
@@ -193,7 +189,6 @@ Visualization Manager:
       Topic:
         Depth: 10
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /detected_objects
@@ -202,11 +197,10 @@ Visualization Manager:
       Enabled: true
       Name: RRT Inflated Obstacles
       Namespaces:
-        complex_rrt_obstacles: true
+        {}
       Topic:
         Depth: 10
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /complex/rrt_obstacles
@@ -219,7 +213,6 @@ Visualization Manager:
       Topic:
         Depth: 10
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /complex/rrt_tree
@@ -228,7 +221,7 @@ Visualization Manager:
       Enabled: true
       Name: RRT Best Branch
       Namespaces:
-        complex_rrt_best_branch: true
+        {}
       Topic:
         Depth: 10
         Durability Policy: Volatile
@@ -241,7 +234,7 @@ Visualization Manager:
       Enabled: true
       Name: Cone Edges
       Namespaces:
-        complex_cone_edges: true
+        {}
       Topic:
         Depth: 10
         Durability Policy: Volatile
@@ -254,7 +247,7 @@ Visualization Manager:
       Enabled: true
       Name: Corridor Waypoints
       Namespaces:
-        complex_corridor_waypoints: true
+        {}
       Topic:
         Depth: 10
         Durability Policy: Volatile
@@ -350,25 +343,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/ThirdPersonFollower
-      Distance: 18
+      Distance: 17.76430892944336
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
+        X: -0.07615232467651367
+        Y: -0.07377707958221436
         Z: 0
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5707
+      Pitch: 1.5647963285446167
       Target Frame: vehicle_ref
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 0
+      Yaw: 3.5123777389526367
     Saved: ~
 Window Geometry:
   Displays:
@@ -376,6 +369,7 @@ Window Geometry:
   Height: 1016
   Hide Left Dock: false
   Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd0000000100000000000002fb0000039efc0200000005fb000000100044006900730070006c006100790073010000003d000001f5000000c900fffffffb0000001200530065006c0065006300740069006f006e00000001860000009c0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007300000001cc000000bf0000005c00fffffffb0000000a00560069006500770073010000023800000145000000a400fffffffb0000000800540069006d00650100000383000000580000003900ffffff000004390000039e00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
