@@ -7,6 +7,7 @@ Panels:
         - /Global Options1
         - /TF1
         - /CSV Global Path1
+        - /Safety Preemption1
         - /Mission Zones1
         - /Complex Target ROI Path1
         - /RRT Target1
@@ -45,7 +46,7 @@ Visualization Manager:
       Cell Size: 0.5
       Class: rviz_default_plugins/Grid
       Color: 110; 120; 130
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -58,7 +59,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 80
       Reference Frame: vehicle_ref
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/TF
       Enabled: true
       Frame Timeout: 15
@@ -112,6 +113,20 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: Safety Preemption
+      Namespaces:
+        safety_preemption_area: true
+        safety_preemption_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /safety_preemption_markers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
       Name: Mission Zones
       Namespaces:
         complex_start_area: true
@@ -122,7 +137,7 @@ Visualization Manager:
         highway_resume_range: true
       Topic:
         Depth: 5
-        Durability Policy: Volatile
+        Durability Policy: Transient Local
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable

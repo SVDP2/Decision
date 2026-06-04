@@ -4,6 +4,11 @@ import rclpy
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy
+from rclpy.qos import HistoryPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
+from rclpy.time import Time
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
@@ -12,6 +17,15 @@ from auto_drive.mission_zone_core import load_csv_path
 from auto_drive.mission_zone_core import MissionZone
 from auto_drive.mission_zone_core import MissionZoneTracker
 from auto_drive.mission_zone_core import resolve_zones
+from auto_drive.mission_zone_core import resolve_zone
+
+
+TRANSIENT_QOS = QoSProfile(
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 
 def make_point(x, y, z=0.0):
@@ -61,6 +75,9 @@ class MissionZoneNode(Node):
         self.csv_path = load_csv_path(self.csv_file_path)
         self.zones = self.load_zones_from_params()
         self.resolved_zones = resolve_zones(self.zones, self.csv_path)
+        self.marker_zones = [
+            resolve_zone(zone, self.csv_path) for zone in self.zones
+        ]
         self.tracker = MissionZoneTracker(self.resolved_zones)
 
         self.latest_context = None
@@ -75,7 +92,9 @@ class MissionZoneNode(Node):
             String, self.drive_context_topic, 10
         )
         self.status_pub = self.create_publisher(String, self.status_topic, 10)
-        self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
+        self.marker_pub = self.create_publisher(
+            MarkerArray, self.marker_topic, TRANSIENT_QOS
+        )
 
         self.timer = self.create_timer(
             1.0 / max(self.marker_publish_rate_hz, 1e-3), self.timer_callback
@@ -83,7 +102,9 @@ class MissionZoneNode(Node):
 
         self.get_logger().info(
             'mission_zone_node ready: '
-            f'zones={len(self.resolved_zones)} csv_points={len(self.csv_path.points)}'
+            f'enabled_zones={len(self.resolved_zones)} '
+            f'marker_zones={len(self.marker_zones)} '
+            f'csv_points={len(self.csv_path.points)}'
         )
 
     def now_sec(self):
@@ -194,7 +215,11 @@ class MissionZoneNode(Node):
 
     def publish_markers(self):
         marker_array = MarkerArray()
+        stamp = Time().to_msg()
+
         clear = Marker()
+        clear.header.stamp = stamp
+        clear.header.frame_id = self.csv_frame_id
         clear.action = Marker.DELETEALL
         marker_array.markers.append(clear)
 
@@ -203,11 +228,12 @@ class MissionZoneNode(Node):
             self.marker_pub.publish(marker_array)
             return
 
-        stamp = self.get_clock().now().to_msg()
         marker_id = 0
-        for resolved in self.resolved_zones:
+        for resolved in self.marker_zones:
             zone = resolved.source
-            active = self.tracker.zone_active.get(zone.name, False)
+            active = bool(
+                zone.enabled and self.tracker.zone_active.get(zone.name, False)
+            )
             color = self.zone_color(zone.context, active)
 
             if resolved.center is not None:
@@ -231,7 +257,12 @@ class MissionZoneNode(Node):
             if label_point is not None:
                 marker_array.markers.append(
                     self.make_zone_label(
-                        marker_id, stamp, zone, label_point, origin, active
+                        marker_id,
+                        stamp,
+                        zone,
+                        label_point,
+                        origin,
+                        active,
                     )
                 )
                 marker_id += 1
@@ -246,6 +277,7 @@ class MissionZoneNode(Node):
         marker.id = marker_id
         marker.type = Marker.CYLINDER
         marker.action = Marker.ADD
+        marker.frame_locked = True
         marker.pose.position = make_point(
             center[0] - origin[0], center[1] - origin[1], -0.2
         )
@@ -267,6 +299,7 @@ class MissionZoneNode(Node):
         marker.id = marker_id
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
+        marker.frame_locked = True
         marker.pose.orientation.w = 1.0
         marker.scale.x = max(zone.radius * 0.35, 0.08)
         marker.color.r = color[0]
@@ -285,6 +318,7 @@ class MissionZoneNode(Node):
         marker.id = marker_id
         marker.type = Marker.TEXT_VIEW_FACING
         marker.action = Marker.ADD
+        marker.frame_locked = True
         marker.pose.position = make_point(
             point[0] - origin[0], point[1] - origin[1], 0.9
         )
@@ -295,6 +329,8 @@ class MissionZoneNode(Node):
         marker.color.b = 1.0
         marker.color.a = 1.0
         marker.text = f'{zone.name}\\n{zone.context}'
+        if not zone.enabled:
+            marker.text += '\\nDISABLED'
         if active:
             marker.text += '\\nACTIVE'
         return marker

@@ -12,6 +12,12 @@ mission_supervisor_node:
     active_algorithm_topic: "/active_algorithm"
     safety_status_topic: "/safety_status"
     safety_active_topic: "/safety_active"
+    safety_marker_topic: "/safety_preemption_markers"
+    safety_marker_frame_id: "vehicle_ref"
+    safety_marker_radius_m: 2.4
+    safety_marker_height_m: 0.18
+    safety_marker_text_z_m: 1.4
+    safety_marker_text_scale: 0.45
     command_timeout_sec: 0.5
     release_hysteresis_sec: 0.5
     publish_rate_hz: 20.0

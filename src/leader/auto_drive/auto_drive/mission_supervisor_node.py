@@ -1,11 +1,25 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy
+from rclpy.qos import HistoryPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Bool
 from std_msgs.msg import Float32
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
 
 from auto_drive.mission_supervisor_logic import MissionPolicy
 from auto_drive.mission_supervisor_logic import MissionSupervisorCore
+
+
+TRANSIENT_QOS = QoSProfile(
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 
 class MissionSupervisorNode(Node):
@@ -48,6 +62,37 @@ class MissionSupervisorNode(Node):
         self.safety_active_topic = self.declare_parameter(
             'safety_active_topic', '/safety_active'
         ).value
+        self.safety_marker_topic = self.declare_parameter(
+            'safety_marker_topic', '/safety_preemption_markers'
+        ).value
+        self.safety_marker_frame_id = self.declare_parameter(
+            'safety_marker_frame_id', 'vehicle_ref'
+        ).value
+        self.safety_marker_radius_m = max(
+            float(
+                self.declare_parameter('safety_marker_radius_m', 2.4).value
+            ),
+            0.1,
+        )
+        self.safety_marker_height_m = max(
+            float(
+                self.declare_parameter(
+                    'safety_marker_height_m', 0.18
+                ).value
+            ),
+            0.01,
+        )
+        self.safety_marker_text_z_m = float(
+            self.declare_parameter('safety_marker_text_z_m', 1.4).value
+        )
+        self.safety_marker_text_scale = max(
+            float(
+                self.declare_parameter(
+                    'safety_marker_text_scale', 0.45
+                ).value
+            ),
+            0.05,
+        )
         self.command_timeout_sec = float(
             self.declare_parameter('command_timeout_sec', 0.5).value
         )
@@ -158,6 +203,9 @@ class MissionSupervisorNode(Node):
         self.safety_active_pub = self.create_publisher(
             Bool, self.safety_active_topic, 10
         )
+        self.safety_marker_pub = self.create_publisher(
+            MarkerArray, self.safety_marker_topic, TRANSIENT_QOS
+        )
 
         self.timer = self.create_timer(
             1.0 / max(self.publish_rate_hz, 1e-3), self.timer_callback
@@ -242,6 +290,69 @@ class MissionSupervisorNode(Node):
         safety_active_msg = Bool()
         safety_active_msg.data = bool(snapshot.safety_active)
         self.safety_active_pub.publish(safety_active_msg)
+
+        self.publish_safety_markers(snapshot)
+
+    def publish_safety_markers(self, snapshot):
+        marker_array = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+
+        clear = Marker()
+        clear.header.stamp = stamp
+        clear.header.frame_id = self.safety_marker_frame_id
+        clear.action = Marker.DELETEALL
+        marker_array.markers.append(clear)
+
+        if snapshot.safety_active:
+            marker_array.markers.append(
+                self.make_safety_area_marker(stamp)
+            )
+            marker_array.markers.append(
+                self.make_safety_text_marker(stamp, snapshot)
+            )
+
+        self.safety_marker_pub.publish(marker_array)
+
+    def make_safety_area_marker(self, stamp):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.safety_marker_frame_id
+        marker.ns = 'safety_preemption_area'
+        marker.id = 0
+        marker.type = Marker.CYLINDER
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.z = self.safety_marker_height_m * 0.5
+        marker.scale.x = self.safety_marker_radius_m * 2.0
+        marker.scale.y = self.safety_marker_radius_m * 2.0
+        marker.scale.z = self.safety_marker_height_m
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 0.38
+        return marker
+
+    def make_safety_text_marker(self, stamp, snapshot):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.safety_marker_frame_id
+        marker.ns = 'safety_preemption_text'
+        marker.id = 1
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.z = self.safety_marker_text_z_m
+        marker.scale.z = self.safety_marker_text_scale
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        marker.text = (
+            'SAFETY HOLD\n'
+            f'{snapshot.safety_status.value}\n'
+            f'throttle={snapshot.output_throttle:.2f}'
+        )
+        return marker
 
 
 def main(args=None):

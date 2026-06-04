@@ -10,24 +10,25 @@ mission_zone_node:
     context_latch_duration_sec: 2.0
 
     # CSV row index is zero-based and uses the first two CSV columns as UTM x/y.
-    # Set enabled: true after choosing mission transition points.
+    # Disabled zones are still shown in RViz; set enabled: true only after
+    # choosing the actual mission transition points.
     zone_names: ["complex_start", "highway_resume"]
 
     complex_start:
-      enabled: false
+      enabled: true
       mode: "csv_index"
-      csv_index: 0
-      radius: 2.0
+      csv_index: 1300
+      radius: 4.0
       context: "complex"
       once: true
       enter_radius: -1.0
       exit_radius: -1.0
 
     highway_resume:
-      enabled: false
+      enabled: true
       mode: "csv_index"
-      csv_index: 0
-      radius: 2.0
+      csv_index: 1500
+      radius: 4.0
       context: "highway"
       once: true
       enter_radius: -1.0
