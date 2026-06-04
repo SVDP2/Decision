@@ -4,6 +4,7 @@ from rclpy.qos import DurabilityPolicy
 from rclpy.qos import HistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import ReliabilityPolicy
+from rclpy.time import Time
 from std_msgs.msg import Bool
 from std_msgs.msg import Float32
 from std_msgs.msg import String
@@ -62,6 +63,23 @@ class MissionSupervisorNode(Node):
         self.safety_active_topic = self.declare_parameter(
             'safety_active_topic', '/safety_active'
         ).value
+        self.mission_marker_topic = self.declare_parameter(
+            'mission_marker_topic', '/mission_state_marker'
+        ).value
+        self.mission_marker_frame_id = self.declare_parameter(
+            'mission_marker_frame_id', 'vehicle_ref'
+        ).value
+        self.mission_marker_text_z_m = float(
+            self.declare_parameter('mission_marker_text_z_m', 2.1).value
+        )
+        self.mission_marker_text_scale = max(
+            float(
+                self.declare_parameter(
+                    'mission_marker_text_scale', 0.42
+                ).value
+            ),
+            0.05,
+        )
         self.safety_marker_topic = self.declare_parameter(
             'safety_marker_topic', '/safety_preemption_markers'
         ).value
@@ -203,6 +221,9 @@ class MissionSupervisorNode(Node):
         self.safety_active_pub = self.create_publisher(
             Bool, self.safety_active_topic, 10
         )
+        self.mission_marker_pub = self.create_publisher(
+            Marker, self.mission_marker_topic, TRANSIENT_QOS
+        )
         self.safety_marker_pub = self.create_publisher(
             MarkerArray, self.safety_marker_topic, TRANSIENT_QOS
         )
@@ -291,7 +312,31 @@ class MissionSupervisorNode(Node):
         safety_active_msg.data = bool(snapshot.safety_active)
         self.safety_active_pub.publish(safety_active_msg)
 
+        self.publish_mission_marker(snapshot)
         self.publish_safety_markers(snapshot)
+
+    def publish_mission_marker(self, snapshot):
+        marker = Marker()
+        marker.header.stamp = Time().to_msg()
+        marker.header.frame_id = self.mission_marker_frame_id
+        marker.ns = 'mission_state_text'
+        marker.id = 0
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.frame_locked = True
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.z = self.mission_marker_text_z_m
+        marker.scale.z = self.mission_marker_text_scale
+        color = self.mission_state_color(snapshot.mission_state.value)
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = 1.0
+        marker.text = (
+            f'MISSION: {snapshot.mission_state.value}\n'
+            f'ALG: {snapshot.active_algorithm.value}'
+        )
+        self.mission_marker_pub.publish(marker)
 
     def publish_safety_markers(self, snapshot):
         marker_array = MarkerArray()
@@ -353,6 +398,16 @@ class MissionSupervisorNode(Node):
             f'throttle={snapshot.output_throttle:.2f}'
         )
         return marker
+
+    @staticmethod
+    def mission_state_color(mission_state):
+        if mission_state == 'COMPLEX':
+            return 1.0, 0.25, 0.9
+        if mission_state == 'CITY':
+            return 1.0, 0.85, 0.05
+        if mission_state == 'HIGHWAY':
+            return 0.1, 0.8, 1.0
+        return 1.0, 1.0, 1.0
 
 
 def main(args=None):

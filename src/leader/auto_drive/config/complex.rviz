@@ -7,6 +7,7 @@ Panels:
         - /Global Options1
         - /TF1
         - /CSV Global Path1
+        - /Mission State1
         - /Safety Preemption1
         - /Mission Zones1
         - /Complex Target ROI Path1
@@ -110,6 +111,18 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /csv_path
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Mission State
+      Namespaces:
+        mission_state_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mission_state_marker
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -343,7 +356,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/ThirdPersonFollower
-      Distance: 17.76430892944336
+      Distance: 55.676910400390625
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -358,10 +371,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5647963285446167
+      Pitch: 1.5697963237762451
       Target Frame: vehicle_ref
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 3.5123777389526367
+      Yaw: 3.107372283935547
     Saved: ~
 Window Geometry:
   Displays:
