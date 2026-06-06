@@ -57,7 +57,7 @@ def generate_launch_description():
 
     return launch.LaunchDescription([
                                      launch.actions.SetEnvironmentVariable(
-                                         name='ROS_DOMAIN_ID', value='42'),
+                                         name='ROS_DOMAIN_ID', value=os.environ.get('ROS_DOMAIN_ID', '10')),
 
                                      ublox_gps_node,
 
