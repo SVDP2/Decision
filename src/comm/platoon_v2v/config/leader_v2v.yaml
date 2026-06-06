@@ -1,0 +1,38 @@
+leader_v2v_adapter_node:
+  ros__parameters:
+    drive_telemetry_topic: /leader/drive_telemetry
+    encoder_twist_topic: /encoder/twist
+    leader_odom_topic: /leader/localization/gps/odom
+    mission_state_topic: /mission_state
+    active_algorithm_topic: /active_algorithm
+    safety_status_topic: /safety_status
+    safety_active_topic: /safety_active
+    motion_state_topic: /v2v/leader/motion_state
+    v2v_odom_topic: /v2v/leader/odom
+    v2v_mission_state_topic: /v2v/leader/mission_state
+    v2v_safety_state_topic: /v2v/leader/safety_state
+    heartbeat_topic: /v2v/leader/heartbeat
+    publish_rate_hz: 50.0
+    heartbeat_rate_hz: 10.0
+    wheel_base_m: 0.72
+    leader_odom_timeout_sec: 0.5
+    telemetry_timeout_sec: 0.3
+    prefer_encoder_twist_speed: false
+    use_throttle_signed_speed_fallback: true
+    telemetry_speed_deadband_mps: 0.02
+    throttle_speed_deadband: 0.05
+    throttle_speed_fallback_gain_mps: 0.50
+    rc_throttle_neutral_us: 1500
+    rc_throttle_deadband_us: 80
+    rc_throttle_full_scale_us: 400
+
+leader_reference_path_relay_node:
+  ros__parameters:
+    input_path_topic: /roi_path
+    output_path_topic: /v2v/leader/reference_path
+    expected_frame_id: map
+    allow_empty_frame_id: false
+    max_points: 80
+    publish_rate_hz: 10.0
+    input_timeout_sec: 0.5
+    input_transient_local: true

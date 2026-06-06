@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leader/Follower Localization Architecture</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #1d2430;
+      --muted: #607086;
+      --line: #c9d3df;
+      --leader: #dff1ff;
+      --leader-border: #4998cf;
+      --follower: #e6f7ed;
+      --follower-border: #4caa72;
+      --fusion: #fff0cf;
+      --fusion-border: #d79b21;
+      --tf: #efe7ff;
+      --tf-border: #8766c9;
+      --candidate: #edf0f4;
+      --candidate-border: #8a96a8;
+      --danger: #ffe4df;
+      --danger-border: #d76656;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    main { max-width: 1480px; margin: 0 auto; padding: 28px; }
+    h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: 0; }
+    h3 { margin: 0 0 8px; font-size: 15px; letter-spacing: 0; }
+    p { margin: 0 0 10px; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.92em; }
+
+    .subtle { color: var(--muted); }
+    .section { margin-top: 22px; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 0; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+    .swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 16px; }
+    .two { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
+    .box { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fff; min-height: 86px; }
+    .leader { background: var(--leader); border-color: var(--leader-border); }
+    .follower { background: var(--follower); border-color: var(--follower-border); }
+    .fusion { background: var(--fusion); border-color: var(--fusion-border); }
+    .tf { background: var(--tf); border-color: var(--tf-border); }
+    .candidate { background: var(--candidate); border-color: var(--candidate-border); }
+    .danger { background: var(--danger); border-color: var(--danger-border); }
+    .box ul { margin: 8px 0 0 18px; padding: 0; }
+    .box li { margin: 4px 0; }
+
+    .diagram-wrap { overflow-x: auto; padding-bottom: 8px; }
+    svg { min-width: 1320px; width: 100%; height: auto; display: block; }
+    .svg-title { font: 700 15px Inter, sans-serif; fill: var(--ink); }
+    .svg-text { font: 12px Inter, sans-serif; fill: var(--ink); }
+    .svg-small { font: 11px Inter, sans-serif; fill: var(--muted); }
+    .svg-box { stroke-width: 1.5; rx: 8; }
+    .arrow { stroke: #516174; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+    .tf-arrow { stroke: #7356b5; stroke-width: 2.2; fill: none; marker-end: url(#arrow-tf); }
+    .future-arrow { stroke: #b6811e; stroke-width: 2; stroke-dasharray: 7 5; fill: none; marker-end: url(#arrow-future); }
+    .bad-arrow { stroke: #c94f43; stroke-width: 1.8; stroke-dasharray: 4 4; fill: none; marker-end: url(#arrow-bad); }
+
+    .matrix { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .matrix th, .matrix td { border: 1px solid var(--line); padding: 10px; vertical-align: top; }
+    .matrix th { background: #eef2f7; text-align: left; }
+    .ok { color: #187448; font-weight: 700; }
+    .no { color: #a33d31; font-weight: 700; }
+
+    @media (max-width: 980px) {
+      main { padding: 16px; }
+      .grid, .two { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Leader/Follower Localization Architecture</h1>
+    <p class="subtle">현재 launch cleanup 이후 기준. Static TF, relative ESKF, GPS candidate, map anchor 책임을 분리해서 본다.</p>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--leader);border-color:var(--leader-border)"></i>Leader runtime</span>
+      <span><i class="swatch" style="background:var(--follower);border-color:var(--follower-border)"></i>Follower runtime</span>
+      <span><i class="swatch" style="background:var(--fusion);border-color:var(--fusion-border)"></i>Fusion / ESKF</span>
+      <span><i class="swatch" style="background:var(--tf);border-color:var(--tf-border)"></i>TF authority</span>
+      <span><i class="swatch" style="background:var(--candidate);border-color:var(--candidate-border)"></i>Candidate measurement</span>
+      <span><i class="swatch" style="background:var(--danger);border-color:var(--danger-border)"></i>Forbidden duplicate authority</span>
+    </div>
+  </header>
+
+  <section class="section">
+    <h2>Runtime Block Diagram</h2>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 1320 720" role="img" aria-label="Leader follower localization runtime block diagram">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#516174"></path>
+          </marker>
+          <marker id="arrow-tf" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#7356b5"></path>
+          </marker>
+          <marker id="arrow-future" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#b6811e"></path>
+          </marker>
+          <marker id="arrow-bad" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#c94f43"></path>
+          </marker>
+        </defs>
+
+        <rect x="20" y="20" width="390" height="650" fill="#fff" stroke="#c9d3df" rx="10"></rect>
+        <text x="38" y="48" class="svg-title">Leader computer</text>
+        <text x="38" y="68" class="svg-small">canonical: platoon_bringup leader_bringup.launch.py</text>
+
+        <rect x="40" y="95" width="155" height="76" class="svg-box" fill="#dff1ff" stroke="#4998cf"></rect>
+        <text x="54" y="121" class="svg-title">GPS stack</text>
+        <text x="54" y="141" class="svg-text">ublox / fix2nmea</text>
+        <text x="54" y="158" class="svg-text">NTRIP RTK input</text>
+
+        <rect x="225" y="95" width="155" height="76" class="svg-box" fill="#dff1ff" stroke="#4998cf"></rect>
+        <text x="239" y="121" class="svg-title">serial_bridge</text>
+        <text x="239" y="141" class="svg-text">/leader/drive_telemetry</text>
+        <text x="239" y="158" class="svg-text">/encoder/twist</text>
+
+        <rect x="40" y="205" width="155" height="88" class="svg-box" fill="#edf0f4" stroke="#8a96a8"></rect>
+        <text x="54" y="231" class="svg-title">leader GPS odom</text>
+        <text x="54" y="251" class="svg-text">candidate odom</text>
+        <text x="54" y="268" class="svg-small">publish_base_tf:=false</text>
+        <text x="54" y="284" class="svg-small">in platoon_bringup</text>
+
+        <rect x="225" y="205" width="155" height="88" class="svg-box" fill="#dff1ff" stroke="#4998cf"></rect>
+        <text x="239" y="231" class="svg-title">leader_v2v</text>
+        <text x="239" y="251" class="svg-text">motion / safety</text>
+        <text x="239" y="268" class="svg-text">heartbeat / odom</text>
+
+        <rect x="40" y="330" width="340" height="95" class="svg-box" fill="#efe7ff" stroke="#8766c9"></rect>
+        <text x="54" y="356" class="svg-title">leader_static_tf.launch.py</text>
+        <text x="54" y="378" class="svg-text">leader/base_link -> leader/leader_gps</text>
+        <text x="54" y="396" class="svg-text">leader/base_link -> leader/leader_rear</text>
+        <text x="54" y="414" class="svg-text">/leader/vehicle_model/markers</text>
+
+        <rect x="40" y="470" width="340" height="118" class="svg-box" fill="#fff0cf" stroke="#d79b21"></rect>
+        <text x="54" y="496" class="svg-title">future leader_map_anchor</text>
+        <text x="54" y="518" class="svg-text">single owner of map -> leader/base_link</text>
+        <text x="54" y="536" class="svg-text">leader RTK good: use leader GPS</text>
+        <text x="54" y="554" class="svg-text">follower RTK better: invert relative pose</text>
+        <text x="54" y="574" class="svg-small">current note: docs/map_tf_relative_fusion_notes.md</text>
+
+        <rect x="465" y="20" width="390" height="650" fill="#fff" stroke="#c9d3df" rx="10"></rect>
+        <text x="483" y="48" class="svg-title">Follower computer</text>
+        <text x="483" y="68" class="svg-small">canonical: platoon_bringup follower_bringup.launch.py</text>
+
+        <rect x="485" y="95" width="155" height="76" class="svg-box" fill="#e6f7ed" stroke="#4caa72"></rect>
+        <text x="499" y="121" class="svg-title">GPS stack</text>
+        <text x="499" y="141" class="svg-text">ublox / fix2nmea</text>
+        <text x="499" y="158" class="svg-text">NTRIP RTK input</text>
+
+        <rect x="670" y="95" width="155" height="76" class="svg-box" fill="#e6f7ed" stroke="#4caa72"></rect>
+        <text x="684" y="121" class="svg-title">follower_v2v</text>
+        <text x="684" y="141" class="svg-text">receives leader</text>
+        <text x="684" y="158" class="svg-text">motion/safety</text>
+
+        <rect x="485" y="205" width="340" height="106" class="svg-box" fill="#efe7ff" stroke="#8766c9"></rect>
+        <text x="499" y="231" class="svg-title">follower_static_tf.launch.py</text>
+        <text x="499" y="253" class="svg-text">follower/base_link -> imu / usb_cam / follower_gps</text>
+        <text x="499" y="271" class="svg-text">follower/usb_cam -> follower/lidar</text>
+        <text x="499" y="291" class="svg-small">canonical static TF owner</text>
+
+        <rect x="485" y="345" width="155" height="90" class="svg-box" fill="#edf0f4" stroke="#8a96a8"></rect>
+        <text x="499" y="371" class="svg-title">follower GPS</text>
+        <text x="499" y="391" class="svg-text">candidate odom</text>
+        <text x="499" y="409" class="svg-small">currently global/odom</text>
+        <text x="499" y="426" class="svg-small">TF disabled in bringup</text>
+
+        <rect x="670" y="345" width="155" height="90" class="svg-box" fill="#e6f7ed" stroke="#4caa72"></rect>
+        <text x="684" y="371" class="svg-title">motor/control</text>
+        <text x="684" y="391" class="svg-text">xycar_drive</text>
+        <text x="684" y="409" class="svg-text">signed_sync</text>
+
+        <rect x="485" y="470" width="340" height="118" class="svg-box" fill="#fff0cf" stroke="#d79b21"></rect>
+        <text x="499" y="496" class="svg-title">relative_localization_eskf</text>
+        <text x="499" y="518" class="svg-text">ArUco detector + IMU yaw propagation</text>
+        <text x="499" y="536" class="svg-text">LiDAR scan input enabled by default</text>
+        <text x="499" y="554" class="svg-text">GPS relative update from leader/follower odom</text>
+        <text x="499" y="574" class="svg-small">does not publish static TF</text>
+
+        <rect x="910" y="20" width="390" height="650" fill="#fff" stroke="#c9d3df" rx="10"></rect>
+        <text x="928" y="48" class="svg-title">Authority and outputs</text>
+        <text x="928" y="68" class="svg-small">one TF owner per edge</text>
+
+        <rect x="940" y="100" width="320" height="92" class="svg-box" fill="#efe7ff" stroke="#8766c9"></rect>
+        <text x="954" y="126" class="svg-title">Final TF tree</text>
+        <text x="954" y="150" class="svg-text">map -> leader/base_link</text>
+        <text x="954" y="170" class="svg-text">leader/base_link -> follower/base_link</text>
+
+        <rect x="940" y="235" width="320" height="116" class="svg-box" fill="#fff0cf" stroke="#d79b21"></rect>
+        <text x="954" y="261" class="svg-title">Relative outputs</text>
+        <text x="954" y="285" class="svg-text">/follower/localization/leader_base/odom</text>
+        <text x="954" y="305" class="svg-text">/platoon/relative_leader/state</text>
+
+        <rect x="940" y="395" width="320" height="126" class="svg-box" fill="#ffe4df" stroke="#d76656"></rect>
+        <text x="954" y="421" class="svg-title">Do not publish independently</text>
+        <text x="954" y="445" class="svg-text">map -> follower/base_link TF</text>
+        <text x="954" y="465" class="svg-text">duplicate follower static TF</text>
+        <text x="954" y="485" class="svg-text">multiple /platoon/relative_leader/state</text>
+        <text x="954" y="505" class="svg-small">use candidate topics instead</text>
+
+        <path d="M195 245 C210 245 210 245 225 245" class="arrow"></path>
+        <path d="M380 250 C455 250 420 390 485 390" class="arrow"></path>
+        <path d="M825 390 C870 390 880 295 940 295" class="arrow"></path>
+        <path d="M825 530 C875 530 875 292 940 292" class="arrow"></path>
+        <path d="M380 530 C560 610 760 630 940 150" class="future-arrow"></path>
+        <path d="M825 390 C900 380 880 500 940 500" class="bad-arrow"></path>
+        <path d="M940 150 C875 150 855 520 825 520" class="tf-arrow"></path>
+        <text x="404" y="233" class="svg-small">/v2v/leader/odom, motion, safety</text>
+        <text x="850" y="282" class="svg-small">fused relative pose</text>
+        <text x="690" y="646" class="svg-small">future fallback: follower RTK + inverse(relative)</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Canonical Launch Ownership</h2>
+    <div class="grid">
+      <div class="box leader">
+        <h3>Leader bringup</h3>
+        <p><code>ros2 launch platoon_bringup leader_bringup.launch.py</code></p>
+        <ul>
+          <li><code>leader_static_tf.launch.py</code></li>
+          <li><code>leader_v2v.launch.py</code></li>
+          <li><code>serial_bridge_node</code></li>
+          <li>optional <code>leader_gps_odom.launch.py publish_base_tf:=false</code></li>
+        </ul>
+      </div>
+      <div class="box follower">
+        <h3>Follower bringup</h3>
+        <p><code>ros2 launch platoon_bringup follower_bringup.launch.py</code></p>
+        <ul>
+          <li><code>follower_static_tf.launch.py</code></li>
+          <li><code>follower_v2v.launch.py</code></li>
+          <li><code>relative_localization.launch.py</code></li>
+          <li><code>xycar_drive</code> and signed-sync controller</li>
+        </ul>
+      </div>
+      <div class="box fusion">
+        <h3>Relative localization</h3>
+        <p><code>platoon_localization/relative_localization.launch.py</code> wraps <code>relative_localization_eskf</code>.</p>
+        <ul>
+          <li>ArUco board pose correction</li>
+          <li>IMU yaw propagation and bias handling</li>
+          <li>LiDAR scan input enabled by default</li>
+          <li>GPS relative update when both odom candidates are fresh</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Topic and TF Matrix</h2>
+    <table class="matrix">
+      <thead>
+        <tr><th>Signal</th><th>Producer</th><th>Consumer</th><th>Authority type</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/v2v/leader/motion_state</code>, <code>/v2v/leader/safety_state</code>, <code>/v2v/leader/heartbeat</code></td>
+          <td><code>leader_v2v_adapter_node</code></td>
+          <td>Follower V2V receiver, relative-state bridge, controller</td>
+          <td>Telemetry, not TF</td>
+        </tr>
+        <tr>
+          <td><code>/v2v/leader/odom</code></td>
+          <td>Leader V2V forwards leader GPS/map odom when available</td>
+          <td><code>relative_localization_eskf</code> GPS relative update</td>
+          <td>Candidate measurement</td>
+        </tr>
+        <tr>
+          <td><code>/follower/localization/global/odom</code></td>
+          <td><code>follower_gps_odom.launch.py</code></td>
+          <td><code>relative_localization_eskf</code>; future map-anchor fallback</td>
+          <td>Candidate measurement. Rename target: <code>gps_candidate/odom</code></td>
+        </tr>
+        <tr>
+          <td><code>/follower/localization/leader_base/odom</code></td>
+          <td><code>relative_localization_node</code></td>
+          <td><code>relative_aruco_leader_node</code>, future map anchor</td>
+          <td>Relative pose estimate</td>
+        </tr>
+        <tr>
+          <td><code>/platoon/relative_leader/state</code></td>
+          <td><code>relative_aruco_leader_node</code> in current canonical bringup</td>
+          <td>Signed-sync longitudinal controller</td>
+          <td><span class="ok">Single publisher only</span></td>
+        </tr>
+        <tr>
+          <td><code>map -> leader/base_link</code></td>
+          <td>Future <code>leader_map_anchor</code></td>
+          <td>TF tree and map visualization</td>
+          <td><span class="ok">One global anchor</span></td>
+        </tr>
+        <tr>
+          <td><code>map -> follower/base_link</code></td>
+          <td>None in target architecture</td>
+          <td>Derived by TF composition</td>
+          <td><span class="no">Do not publish independently</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Map Anchor Decision</h2>
+    <div class="two">
+      <div class="box tf">
+        <h3>Target TF chain</h3>
+        <p><code>map -> leader/base_link -> follower/base_link -> follower/follower_gps</code></p>
+        <p>Follower GPS does not own <code>map -> follower/base_link</code>. It is an odometry measurement that can improve either the relative ESKF or future leader map anchor.</p>
+      </div>
+      <div class="box fusion">
+        <h3>Future fallback logic</h3>
+        <p>If leader RTK is poor but follower RTK is fixed and relative pose is healthy:</p>
+        <p><code>map->leader = map->follower_candidate * inverse(leader->follower)</code></p>
+        <p>The published TF edge is still only <code>map -> leader/base_link</code>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

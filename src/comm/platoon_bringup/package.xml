@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>platoon_bringup</name>
+  <version>0.1.0</version>
+  <description>Canonical launch wrappers for leader/follower platoon runtime.</description>
+  <maintainer email="xytron@example.com">xytron</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>platoon_localization</exec_depend>
+  <exec_depend>platoon_v2v</exec_depend>
+  <exec_depend>relative_localization_eskf</exec_depend>
+  <exec_depend>serial_bridge</exec_depend>
+  <exec_depend>xycar_longitudinal_controller</exec_depend>
+  <exec_depend>xycar_lateral_controller</exec_depend>
+  <exec_depend>xycar_motor_native</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
