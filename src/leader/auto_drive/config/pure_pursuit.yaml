@@ -4,8 +4,8 @@ pure_pursuit_node:
     heading_valid_topic: "/vehicle_heading_valid"
     steer_topic: "/auto_steer_angle"
     throttle_topic: "/throttle_from_planning"
-    base_frame: "vehicle_ref"
-    path_frame: "csv"
+    base_frame: "leader/base_link"
+    path_frame: "map"
     wheelbase: 0.724
     min_lookahead: 2.0
     max_lookahead: 3.0
@@ -14,8 +14,8 @@ pure_pursuit_node:
     curvature_ema_alpha: 0.7
     ld_ema_alpha: 0.5
     steer_limit_deg: 20.0
-    min_throttle: 0.35
-    max_throttle: 0.5
+    min_throttle: 0.2
+    max_throttle: 0.2
     throttle_ema_alpha: 0.5
     control_rate_hz: 30.0
     steer_zero_when_heading_invalid: true

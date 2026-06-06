@@ -128,7 +128,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 'vehicle_frame',
-                default_value='vehicle_ref',
+                default_value='leader/base_link',
                 description='Vehicle planning frame used as static TF parent.',
             ),
             DeclareLaunchArgument(

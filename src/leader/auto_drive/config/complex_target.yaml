@@ -4,8 +4,8 @@ complex_target_node:
     target_topic: "/complex/rrt_target"
     target_marker_topic: "/complex/rrt_target_marker"
     roi_path_topic: "/complex/target_roi_path"
-    target_frame: "vehicle_ref"
-    csv_frame: "csv"
+    target_frame: "leader/base_link"
+    csv_frame: "map"
     timer_frequency: 20.0
     target_distance_m: 4.0
     search_span_points: 2000

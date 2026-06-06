@@ -3,8 +3,8 @@ roi_path_node:
     csv_path_topic: "/csv_path"
     roi_path_topic: "/roi_path"
     roi_marker_topic: "/roi_path_marker"
-    target_frame: "vehicle_ref"
-    csv_frame: "csv"
+    target_frame: "leader/base_link"
+    csv_frame: "map"
     timer_frequency: 20.0
     roi_length_m: 6.0
     use_points_length: false

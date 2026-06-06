@@ -4,8 +4,8 @@ complex_pure_pursuit_node:
     heading_valid_topic: "/vehicle_heading_valid"
     steer_topic: "/complex/auto_steer_angle"
     throttle_topic: "/complex/throttle_from_planning"
-    base_frame: "vehicle_ref"
-    path_frame: "vehicle_ref"
+    base_frame: "leader/base_link"
+    path_frame: "leader/base_link"
     wheelbase: 0.724
     min_lookahead: 1.2
     max_lookahead: 2.2

@@ -33,10 +33,10 @@ def generate_launch_description():
         'rviz_config', default_value=default_rviz_config
     )
     use_serial_bridge_arg = DeclareLaunchArgument(
-        'use_serial_bridge', default_value='false'
+        'use_serial_bridge', default_value='true'
     )
     serial_port_arg = DeclareLaunchArgument(
-        'serial_port', default_value='/dev/ttyACM1'
+        'serial_port', default_value='/dev/ttyACM0'
     )
     publish_velodyne_tf_arg = DeclareLaunchArgument(
         'publish_velodyne_tf',
@@ -45,7 +45,7 @@ def generate_launch_description():
     )
     vehicle_frame_arg = DeclareLaunchArgument(
         'vehicle_frame',
-        default_value='vehicle_ref',
+        default_value='leader/base_link',
         description='Vehicle planning frame used as static TF parent.',
     )
     velodyne_frame_arg = DeclareLaunchArgument(

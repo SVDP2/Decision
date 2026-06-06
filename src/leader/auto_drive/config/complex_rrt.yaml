@@ -1,6 +1,6 @@
 complex_rrt_planner_node:
   ros__parameters:
-    planning_frame: "vehicle_ref"
+    planning_frame: "leader/base_link"
     cone_pose_array_topic: "/complex/cones"
     cone_marker_topic: "/detected_objects"
     object_marker_namespace: "objects"

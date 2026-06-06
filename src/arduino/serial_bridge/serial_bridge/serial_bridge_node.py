@@ -3,20 +3,21 @@ import struct
 import threading
 import time
 
-import rclpy
-import serial
 from ackermann_msgs.msg import AckermannDrive
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from platoon_interfaces.msg import LeaderDriveTelemetry
 from platoon_v2v.telemetry_protocol import LeaderTelemetryFrame
 from platoon_v2v.telemetry_protocol import LeaderTelemetryStreamParser
+import rclpy
 from rclpy.node import Node
+import serial
 from serial import SerialException
 from std_msgs.msg import Bool
 from std_msgs.msg import Float32
 
 
 class SerialBridgeNode(Node):
+
     def __init__(self):
         super().__init__('serial_bridge_node')
 
@@ -34,7 +35,7 @@ class SerialBridgeNode(Node):
         self.drive_telemetry_topic = self.declare_parameter(
             'drive_telemetry_topic', '/leader/drive_telemetry'
         ).value
-        self.port_name = self.declare_parameter('port', '/dev/ttyACM1').value
+        self.port_name = self.declare_parameter('port', '/dev/ttyACM0').value
         self.baudrate = int(self.declare_parameter('baud', 115200).value)
         self.tx_period_sec = float(
             self.declare_parameter('tx_period_sec', 0.067).value
@@ -109,7 +110,7 @@ class SerialBridgeNode(Node):
         else:
             if input_mode != 'direct':
                 self.get_logger().warn(
-                    "Unknown input_mode "
+                    'Unknown input_mode '
                     f"'{self.input_mode}', falling back to 'direct'."
                 )
             self.create_subscription(
@@ -409,7 +410,7 @@ class SerialBridgeNode(Node):
                     if len(buffer) < packet_size:
                         break
 
-                    payload = buffer[2 : packet_size - 1]
+                    payload = buffer[2:packet_size - 1]
                     crc_received = buffer[packet_size - 1]
                     crc_calculated = 0
                     for byte in payload:
