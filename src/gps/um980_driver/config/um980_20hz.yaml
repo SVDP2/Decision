@@ -1,0 +1,17 @@
+um980_driver:
+  ros__parameters:
+    port: /dev/ttyUSB0
+    baud: 0
+    covariance_timeout_s: 2.0
+    covariance_max_std_m: 100.0
+    frame_id: gps
+    configure_on_start: true
+    save_config: false
+    mode: survey_20hz
+    publish_period_s: 0.05
+    status_verbose_period_s: 1.0
+    base_station_name: ""
+    ntrip_enabled: true
+    ntrip_private_yaml: ""
+    ntrip_gga_interval_s: 5.0
+    unknown_velocity_variance: 100.0

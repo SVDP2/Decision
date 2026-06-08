@@ -1,0 +1,10 @@
+host: gnss.eseoul.go.kr
+port: 2101
+mountpoint: SONP-RTCM32
+authenticate: true
+username: seoul
+password: seoul
+reconnect_wait_s: 5.0
+rtcm_timeout_s: 15.0
+ntrip_version: Ntrip/2.0
+rtcm_message_package: rtcm_msgs
