@@ -27,7 +27,7 @@ mission_zone_node:
     highway_resume:
       enabled: true
       mode: "csv_index"
-      csv_index: 1500
+      csv_index: 1400
       radius: 4.0
       context: "highway"
       once: true

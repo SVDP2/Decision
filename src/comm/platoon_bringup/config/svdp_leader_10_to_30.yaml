@@ -1,0 +1,17 @@
+name: svdp_leader_domain_bridge
+from_domain: 10
+to_domain: 30
+
+topics:
+  /v2v/leader/motion_state:
+    type: platoon_interfaces/msg/LeaderMotionState
+  /v2v/leader/odom:
+    type: nav_msgs/msg/Odometry
+  /v2v/leader/mission_state:
+    type: platoon_interfaces/msg/LeaderMissionState
+  /v2v/leader/safety_state:
+    type: platoon_interfaces/msg/LeaderSafetyState
+  /v2v/leader/heartbeat:
+    type: platoon_interfaces/msg/Heartbeat
+  /v2v/leader/reference_path:
+    type: nav_msgs/msg/Path

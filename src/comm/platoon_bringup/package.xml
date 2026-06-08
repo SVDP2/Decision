@@ -12,6 +12,7 @@
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>domain_bridge</exec_depend>
   <exec_depend>platoon_localization</exec_depend>
   <exec_depend>platoon_v2v</exec_depend>
   <exec_depend>relative_localization_eskf</exec_depend>
