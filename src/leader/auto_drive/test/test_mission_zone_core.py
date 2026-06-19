@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from auto_drive.mission_zone_core import load_csv_path
+from auto_drive.mission_zone_core import has_active_zone
 from auto_drive.mission_zone_core import MissionZone
 from auto_drive.mission_zone_core import MissionZoneTracker
 from auto_drive.mission_zone_core import resolve_zones
@@ -91,6 +92,70 @@ class MissionZoneCoreTest(unittest.TestCase):
         self.assertEqual(enter.context, 'complex')
         self.assertFalse(still_active.triggered)
         self.assertEqual(exit_zone.context, 'highway')
+
+    def test_active_traffic_zone_can_drive_intersection_state(self):
+        zones = [
+            MissionZone(
+                name='traffic_zone',
+                mode='utm',
+                x=10.0,
+                y=10.0,
+                radius=1.0,
+                exit_radius=1.5,
+                context='',
+                once=False,
+            )
+        ]
+        tracker = MissionZoneTracker(resolve_zones(zones, load_csv_path('')))
+
+        outside = tracker.evaluate((8.0, 10.0))
+        inside = tracker.evaluate((10.0, 10.0))
+        hysteresis = tracker.evaluate((11.2, 10.0))
+        exited = tracker.evaluate((12.0, 10.0))
+
+        self.assertFalse(
+            has_active_zone(outside.active_zones, ['traffic_zone'])
+        )
+        self.assertTrue(has_active_zone(inside.active_zones, ['traffic_zone']))
+        self.assertTrue(
+            has_active_zone(hysteresis.active_zones, ['traffic_zone'])
+        )
+        self.assertFalse(
+            has_active_zone(exited.active_zones, ['traffic_zone'])
+        )
+
+    def test_city_then_complex_transition_sequence(self):
+        zones = [
+            MissionZone(
+                name='city_zone',
+                mode='utm',
+                x=10.0,
+                y=0.0,
+                radius=1.0,
+                context='city',
+                once=True,
+            ),
+            MissionZone(
+                name='complex_start',
+                mode='utm',
+                x=20.0,
+                y=0.0,
+                radius=1.0,
+                context='complex',
+                once=True,
+            ),
+        ]
+        tracker = MissionZoneTracker(resolve_zones(zones, load_csv_path('')))
+
+        highway = tracker.evaluate((0.0, 0.0))
+        city = tracker.evaluate((10.0, 0.0))
+        between = tracker.evaluate((15.0, 0.0))
+        complex_zone = tracker.evaluate((20.0, 0.0))
+
+        self.assertFalse(highway.triggered)
+        self.assertEqual(city.context, 'city')
+        self.assertFalse(between.triggered)
+        self.assertEqual(complex_zone.context, 'complex')
 
 
 if __name__ == '__main__':

@@ -10,6 +10,9 @@ def generate_launch_description():
     mission_params = os.path.join(
         auto_drive_share_dir, 'config', 'mission_supervisor.yaml'
     )
+    traffic_signal_gate_params = os.path.join(
+        auto_drive_share_dir, 'config', 'traffic_signal_gate.yaml'
+    )
 
     mission_supervisor_node = Node(
         package='auto_drive',
@@ -19,4 +22,14 @@ def generate_launch_description():
         parameters=[mission_params],
     )
 
-    return LaunchDescription([mission_supervisor_node])
+    traffic_signal_gate_node = Node(
+        package='auto_drive',
+        executable='traffic_signal_gate_node',
+        name='traffic_signal_gate_node',
+        output='screen',
+        parameters=[traffic_signal_gate_params],
+    )
+
+    return LaunchDescription(
+        [traffic_signal_gate_node, mission_supervisor_node]
+    )

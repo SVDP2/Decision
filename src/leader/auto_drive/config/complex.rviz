@@ -143,8 +143,8 @@ Visualization Manager:
       Namespaces:
         complex_start_area: true
         complex_start_label: true
-        highway_resume_area: true
-        highway_resume_label: true
+        city_zone_area: true
+        city_zone_label: true
       Topic:
         Depth: 5
         Durability Policy: Transient Local

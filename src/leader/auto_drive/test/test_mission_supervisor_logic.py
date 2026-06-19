@@ -9,29 +9,38 @@ class MissionSupervisorCoreTest(unittest.TestCase):
     def test_highway_planning_throttle_passes_through(self):
         core = MissionSupervisorCore()
 
-        core.set_planning_throttle(0.62, now_sec=1.0)
+        core.set_planning_throttle(0.38, now_sec=1.0)
         snapshot = core.update(now_sec=1.0)
 
         self.assertEqual(snapshot.mission_state, MissionState.HIGHWAY)
-        self.assertAlmostEqual(snapshot.output_throttle, 0.62)
+        self.assertAlmostEqual(snapshot.output_throttle, 0.38)
         self.assertFalse(snapshot.safety_active)
 
     def test_city_context_applies_lower_speed_policy(self):
         core = MissionSupervisorCore()
 
         core.set_drive_context('city intersection zone')
-        core.set_planning_throttle(0.8, now_sec=1.0)
+        core.set_planning_throttle(0.28, now_sec=1.0)
         snapshot = core.update(now_sec=1.0)
 
         self.assertEqual(snapshot.mission_state, MissionState.CITY)
-        self.assertAlmostEqual(snapshot.output_throttle, 0.5)
+        self.assertAlmostEqual(snapshot.output_throttle, 0.28)
 
-    def test_traffic_stop_preempts_and_releases_after_hysteresis(self):
+    def test_city_policy_caps_unexpected_high_throttle(self):
+        core = MissionSupervisorCore()
+
+        core.set_drive_context('city')
+        core.set_planning_throttle(0.8, now_sec=1.0)
+        snapshot = core.update(now_sec=1.0)
+
+        self.assertAlmostEqual(snapshot.output_throttle, 0.3)
+
+    def test_green_releases_traffic_stop_while_intersection_stays_active(self):
         core = MissionSupervisorCore(
             release_hysteresis_sec=0.5, command_timeout_sec=1.0
         )
 
-        core.set_planning_throttle(0.6, now_sec=1.0)
+        core.set_planning_throttle(0.38, now_sec=1.0)
         core.set_traffic_stop(True)
         core.set_intersection(True)
         blocked = core.update(now_sec=1.0)
@@ -41,14 +50,13 @@ class MissionSupervisorCoreTest(unittest.TestCase):
         self.assertAlmostEqual(blocked.output_throttle, 0.0)
 
         core.set_traffic_stop(False)
-        core.set_intersection(False)
         held = core.update(now_sec=1.2)
         released = core.update(now_sec=1.7)
 
         self.assertTrue(held.safety_active)
         self.assertFalse(released.safety_active)
         self.assertEqual(released.safety_status, SafetyStatus.SAFE_OK)
-        self.assertAlmostEqual(released.output_throttle, 0.6)
+        self.assertAlmostEqual(released.output_throttle, 0.38)
 
     def test_generic_safety_stop_keeps_backward_compatibility(self):
         core = MissionSupervisorCore()

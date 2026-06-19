@@ -1,0 +1,11 @@
+traffic_signal_gate_node:
+  ros__parameters:
+    signal_present_topic: "/traffic_signal/present"
+    signal_red_topic: "/traffic_signal/red"
+    signal_green_topic: "/traffic_signal/green"
+    traffic_stop_topic: "/traffic_stop"
+    status_topic: "/traffic_signal_gate/status"
+    # VLM defaults to one analysis every 3 seconds. Tune this only after
+    # measuring the actual end-to-end inference and publish interval.
+    signal_timeout_sec: 5.0
+    publish_rate_hz: 20.0

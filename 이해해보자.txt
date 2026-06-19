@@ -67,7 +67,7 @@
 
   Complex 모드 전환:
 
-  ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+  ros2 topic pub /mission_context std_msgs/msg/String "{data: complex}" --once
 
   상태 확인:
 

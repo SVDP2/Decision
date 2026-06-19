@@ -1,7 +1,9 @@
 mission_zone_node:
   ros__parameters:
     vehicle_utm_topic: "/vehicle_ref_utm"
-    drive_context_topic: "/drive_context"
+    drive_context_topic: "/mission_context"
+    intersection_topic: "/intersection"
+    traffic_zone_names: ["traffic_zone"]
     status_topic: "/mission_zone_status"
     marker_topic: "/mission_zones"
     csv_file_path: ""
@@ -12,7 +14,19 @@ mission_zone_node:
     # CSV row index is zero-based and uses the first two CSV columns as UTM x/y.
     # Disabled zones are still shown in RViz; set enabled: true only after
     # choosing the actual mission transition points.
-    zone_names: ["complex_start", "highway_resume"]
+    zone_names: ["city_zone", "complex_start", "traffic_zone"]
+
+    # Transition from the default HIGHWAY mission to CITY. Verify index 100
+    # against the field route before driving.
+    city_zone:
+      enabled: true
+      mode: "csv_index"
+      csv_index: 100
+      radius: 4.0
+      context: "city"
+      once: true
+      enter_radius: -1.0
+      exit_radius: -1.0
 
     complex_start:
       enabled: true
@@ -24,12 +38,15 @@ mission_zone_node:
       enter_radius: -1.0
       exit_radius: -1.0
 
-    highway_resume:
+    # Set the measured stop-line approach indices before enabling this zone.
+    # Do not copy coordinates from Mandol_all: they are outside this CSV route.
+    traffic_zone:
       enabled: false
-      mode: "csv_index"
-      csv_index: 100
-      radius: 4.0
-      context: "highway"
-      once: true
-      enter_radius: -1.0
-      exit_radius: -1.0
+      mode: "csv_range"
+      start_index: 0
+      end_index: 0
+      radius: 2.0
+      context: ""
+      once: false
+      enter_radius: 2.0
+      exit_radius: 3.0

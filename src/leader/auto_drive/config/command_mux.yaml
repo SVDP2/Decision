@@ -1,9 +1,11 @@
 command_mux_node:
   ros__parameters:
     mission_state_topic: "/mission_state"
-    drive_context_topic: "/drive_context"
+    drive_context_topic: "/mission_context"
     highway_steer_topic: "/highway/auto_steer_angle"
     highway_throttle_topic: "/highway/throttle_from_planning"
+    city_steer_topic: "/city/auto_steer_angle"
+    city_throttle_topic: "/city/throttle_from_planning"
     complex_steer_topic: "/complex/auto_steer_angle"
     complex_throttle_topic: "/complex/throttle_from_planning"
     output_steer_topic: "/auto_steer_angle"

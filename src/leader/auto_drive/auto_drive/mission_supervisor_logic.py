@@ -63,9 +63,9 @@ class MissionSupervisorCore:
 
         self.mission_policies = {
             MissionState.HIGHWAY: highway_policy
-            or MissionPolicy(throttle_scale=1.0, throttle_limit=0.7),
+            or MissionPolicy(throttle_scale=1.0, throttle_limit=0.4),
             MissionState.CITY: city_policy
-            or MissionPolicy(throttle_scale=0.75, throttle_limit=0.5),
+            or MissionPolicy(throttle_scale=1.0, throttle_limit=0.3),
             MissionState.COMPLEX: complex_policy
             or MissionPolicy(throttle_scale=0.6, throttle_limit=0.4),
         }

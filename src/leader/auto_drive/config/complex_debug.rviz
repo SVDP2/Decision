@@ -113,9 +113,9 @@ Visualization Manager:
         complex_start_area: true
         complex_start_label: true
         complex_start_range: true
-        highway_resume_area: true
-        highway_resume_label: true
-        highway_resume_range: true
+        city_zone_area: true
+        city_zone_label: true
+        city_zone_range: true
       Topic:
         Depth: 5
         Durability Policy: Volatile

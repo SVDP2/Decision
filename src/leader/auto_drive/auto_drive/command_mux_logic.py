@@ -39,10 +39,19 @@ class CommandMuxCore:
     def __init__(self, command_timeout_sec=0.5):
         self.command_timeout_sec = max(float(command_timeout_sec), 0.0)
 
-    def select(self, mission_state, highway_command, complex_command, now_sec):
+    def select(
+        self,
+        mission_state,
+        highway_command,
+        city_command,
+        complex_command,
+        now_sec,
+    ):
         mission = parse_mission_state(mission_state)
         if mission == 'complex':
             return self._select_source('complex', complex_command, now_sec)
+        if mission == 'city':
+            return self._select_source('city', city_command, now_sec)
         return self._select_source('highway', highway_command, now_sec)
 
     def _select_source(self, source, command, now_sec):

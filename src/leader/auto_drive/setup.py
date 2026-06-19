@@ -38,6 +38,8 @@ setup(
             'mission_supervisor_node = '
             'auto_drive.mission_supervisor_node:main',
             'mission_zone_node = auto_drive.mission_zone_node:main',
+            'traffic_signal_gate_node = '
+            'auto_drive.traffic_signal_gate_node:main',
         ],
     },
 )

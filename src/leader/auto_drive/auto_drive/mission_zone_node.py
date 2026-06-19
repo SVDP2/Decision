@@ -9,11 +9,13 @@ from rclpy.qos import HistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import ReliabilityPolicy
 from rclpy.time import Time
+from std_msgs.msg import Bool
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
 from auto_drive.mission_zone_core import load_csv_path
+from auto_drive.mission_zone_core import has_active_zone
 from auto_drive.mission_zone_core import MissionZone
 from auto_drive.mission_zone_core import MissionZoneTracker
 from auto_drive.mission_zone_core import resolve_zones
@@ -51,8 +53,16 @@ class MissionZoneNode(Node):
             'vehicle_utm_topic', '/vehicle_ref_utm'
         ).value
         self.drive_context_topic = self.declare_parameter(
-            'drive_context_topic', '/drive_context'
+            'drive_context_topic', '/mission_context'
         ).value
+        self.intersection_topic = self.declare_parameter(
+            'intersection_topic', '/intersection'
+        ).value
+        self.traffic_zone_names = list(
+            self.declare_parameter(
+                'traffic_zone_names', ['traffic_zone']
+            ).value
+        )
         self.status_topic = self.declare_parameter(
             'status_topic', '/mission_zone_status'
         ).value
@@ -84,12 +94,17 @@ class MissionZoneNode(Node):
         self.latest_context_until_sec = 0.0
         self.latest_evaluation = None
         self.last_logged_context = None
+        self.intersection_active = False
+        self.last_logged_intersection_active = None
 
         self.create_subscription(
             PointStamped, self.vehicle_utm_topic, self.vehicle_callback, 10
         )
         self.drive_context_pub = self.create_publisher(
             String, self.drive_context_topic, 10
+        )
+        self.intersection_pub = self.create_publisher(
+            Bool, self.intersection_topic, 10
         )
         self.status_pub = self.create_publisher(String, self.status_topic, 10)
         self.marker_pub = self.create_publisher(
@@ -112,7 +127,7 @@ class MissionZoneNode(Node):
 
     def load_zones_from_params(self):
         zone_names = self.declare_parameter(
-            'zone_names', ['complex_start', 'highway_resume']
+            'zone_names', ['city_zone', 'complex_start']
         ).value
         zones = []
         for name in zone_names:
@@ -171,6 +186,10 @@ class MissionZoneNode(Node):
         vehicle_point = (msg.point.x, msg.point.y)
         evaluation = self.tracker.evaluate(vehicle_point)
         self.latest_evaluation = evaluation
+        self.intersection_active = has_active_zone(
+            evaluation.active_zones, self.traffic_zone_names
+        )
+        self.publish_intersection()
 
         if evaluation.triggered and evaluation.context:
             self.publish_context(evaluation.context)
@@ -190,12 +209,23 @@ class MissionZoneNode(Node):
     def timer_callback(self):
         if self.latest_context and self.now_sec() <= self.latest_context_until_sec:
             self.publish_context(self.latest_context)
+        self.publish_intersection()
         self.publish_markers()
 
     def publish_context(self, context):
         msg = String()
         msg.data = str(context)
         self.drive_context_pub.publish(msg)
+
+    def publish_intersection(self):
+        msg = Bool()
+        msg.data = self.intersection_active
+        self.intersection_pub.publish(msg)
+
+        if self.intersection_active != self.last_logged_intersection_active:
+            state = 'active' if self.intersection_active else 'inactive'
+            self.get_logger().info(f'Traffic zone -> {state}')
+            self.last_logged_intersection_active = self.intersection_active
 
     def publish_status(self, evaluation):
         closest = 'none'

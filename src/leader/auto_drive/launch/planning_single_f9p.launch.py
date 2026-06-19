@@ -14,6 +14,9 @@ def generate_launch_description():
     pure_pursuit_params = os.path.join(
         auto_drive_share_dir, 'config', 'pure_pursuit.yaml'
     )
+    city_pure_pursuit_params = os.path.join(
+        auto_drive_share_dir, 'config', 'city_pure_pursuit.yaml'
+    )
     complex_target_params = os.path.join(
         auto_drive_share_dir, 'config', 'complex_target.yaml'
     )
@@ -69,6 +72,14 @@ def generate_launch_description():
                 'throttle_topic': '/highway/throttle_from_planning',
             },
         ],
+    )
+
+    city_pure_pursuit_node = Node(
+        package='auto_drive',
+        executable='pure_pursuit_node',
+        name='city_pure_pursuit_node',
+        output='screen',
+        parameters=[city_pure_pursuit_params],
     )
 
     complex_target_node = Node(
@@ -169,6 +180,7 @@ def generate_launch_description():
             velodyne_tf_node,
             roi_path_node,
             pure_pursuit_node,
+            city_pure_pursuit_node,
             complex_target_node,
             complex_rrt_planner_node,
             complex_pure_pursuit_node,

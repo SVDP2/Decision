@@ -91,7 +91,7 @@ If GPS/TF is not running:
 ----------------------------
 Set context:
 
-  ros2 topic pub /drive_context std_msgs/msg/String "{data: highway}" --once
+  ros2 topic pub /mission_context std_msgs/msg/String "{data: highway}" --once
 
 Check:
 
@@ -116,10 +116,34 @@ Expected flow:
     -> mission_supervisor_node
     -> /throttle_cmd
 
+Expected command source and nominal throttle:
+- /planning_command_source = highway
+- /throttle_cmd is approximately 0.38 on a valid straight path
+
 Pass condition:
 - /planning_command_source = highway
 - /auto_steer_angle follows /highway/auto_steer_angle
 - /throttle_from_planning follows /highway/throttle_from_planning
+
+
+4-A. City Command Flow Test
+---------------------------
+Set context:
+
+  ros2 topic pub /mission_context std_msgs/msg/String "{data: city}" --once
+
+Check:
+
+  ros2 topic echo /mission_state
+  ros2 topic echo /planning_command_source
+  ros2 topic echo /city/auto_steer_angle
+  ros2 topic echo /city/throttle_from_planning
+  ros2 topic echo /throttle_cmd
+
+Expected:
+- /mission_state = CITY
+- /planning_command_source = city
+- /throttle_cmd is approximately 0.28 on a valid straight path
 
 
 5. Complex RRT Test Without GPS
@@ -165,7 +189,7 @@ Expected:
 ---------------------------------
 Set context:
 
-  ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+  ros2 topic pub /mission_context std_msgs/msg/String "{data: complex}" --once
 
 Check:
 
@@ -288,9 +312,9 @@ Case: /complex/rrt_status = missing_cones
   - object frame such as velodyne must be TF-transformable to vehicle_ref
 
 Case: /planning_command_source = highway while expecting complex
-- Check /drive_context.
+- Check /mission_context.
 - Check /mission_state.
-- Command mux uses /mission_state and /drive_context.
+- Command mux uses /mission_state and /mission_context.
 
 Case: /auto_steer_angle is zero
 - Selected planner command may be stale.

@@ -50,7 +50,45 @@ ros2 launch auto_drive bringup_single_f9p.launch.py \
 ```
 
 - gps 모드 전환
-ros2 topic pub /drive_context std_msgs/msg/String "{data: complex}" --once
+ros2 topic pub /mission_context std_msgs/msg/String "{data: complex}" --once
+
+- 신호등 연동
+
+VLM의 `/drive_context` JSON과 mission 문자열 토픽을 분리하기 위해 DECISION은
+`/mission_context`를 사용한다. VLM이 발행하는 다음 Bool 토픽은
+`traffic_signal_gate_node`가 구독한다.
+
+```
+/traffic_signal/present
+/traffic_signal/red
+/traffic_signal/green
+```
+
+`mission_zones.yaml`에서 실제 정지선 접근 구간의 CSV index를 입력한 뒤
+`traffic_zone.enabled: true`로 변경한다. traffic zone 내부에서는 명확하고
+fresh한 green만 `/traffic_stop`을 해제한다.
+
+- highway / city / complex 미션 전환
+
+기본 미션은 highway다. `city_zone`의 CSV index 100에 진입하면 city,
+`complex_start`의 CSV index 1300에 진입하면 complex로 전환한다.
+
+```
+HIGHWAY -> /highway/* -> nominal throttle 0.38
+CITY    -> /city/*    -> nominal throttle 0.28
+COMPLEX -> /complex/*
+```
+
+상태 및 실제 속도 확인:
+
+```
+ros2 topic echo /mission_state
+ros2 topic echo /planning_command_source
+ros2 topic echo /throttle_cmd
+ros2 topic echo /encoder/twist
+```
+
+현장 주행 전 `city_zone.csv_index: 100`이 실제 전환 위치인지 반드시 확인한다.
 
 - 라이다 실행 명령어
 cd LiDAR_ws/SVCD_perception

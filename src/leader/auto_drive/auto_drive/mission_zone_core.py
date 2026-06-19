@@ -98,6 +98,13 @@ def resolve_zones(zones, csv_path):
     return [resolve_zone(zone, csv_path) for zone in zones if zone.enabled]
 
 
+def has_active_zone(active_zones, selected_zone_names):
+    active_zone_names = {str(name) for name in active_zones}
+    return any(
+        str(name) in active_zone_names for name in selected_zone_names
+    )
+
+
 def resolve_zone(zone, csv_path):
     mode = zone.normalized_mode()
     if mode == 'csv_index':

@@ -2,7 +2,7 @@ mission_supervisor_node:
   ros__parameters:
     throttle_from_planning_topic: "/throttle_from_planning"
     throttle_cmd_topic: "/throttle_cmd"
-    drive_context_topic: "/drive_context"
+    drive_context_topic: "/mission_context"
     safety_stop_topic: "/safety_stop"
     manual_stop_topic: "/manual_stop"
     traffic_stop_topic: "/traffic_stop"
@@ -27,8 +27,8 @@ mission_supervisor_node:
     publish_rate_hz: 20.0
     default_mission: "highway"
     highway_throttle_scale: 1.0
-    highway_throttle_limit: 0.7
-    city_throttle_scale: 0.75
-    city_throttle_limit: 0.5
+    highway_throttle_limit: 0.4
+    city_throttle_scale: 1.0
+    city_throttle_limit: 0.3
     complex_throttle_scale: 0.6
     complex_throttle_limit: 0.4

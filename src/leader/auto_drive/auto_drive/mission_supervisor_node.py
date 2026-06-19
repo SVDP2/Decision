@@ -34,7 +34,7 @@ class MissionSupervisorNode(Node):
             'throttle_cmd_topic', '/throttle_cmd'
         ).value
         self.drive_context_topic = self.declare_parameter(
-            'drive_context_topic', '/drive_context'
+            'drive_context_topic', '/mission_context'
         ).value
         self.safety_stop_topic = self.declare_parameter(
             'safety_stop_topic', '/safety_stop'
@@ -129,15 +129,15 @@ class MissionSupervisorNode(Node):
                 self.declare_parameter('highway_throttle_scale', 1.0).value
             ),
             throttle_limit=float(
-                self.declare_parameter('highway_throttle_limit', 0.7).value
+                self.declare_parameter('highway_throttle_limit', 0.4).value
             ),
         )
         city_policy = MissionPolicy(
             throttle_scale=float(
-                self.declare_parameter('city_throttle_scale', 0.75).value
+                self.declare_parameter('city_throttle_scale', 1.0).value
             ),
             throttle_limit=float(
-                self.declare_parameter('city_throttle_limit', 0.5).value
+                self.declare_parameter('city_throttle_limit', 0.3).value
             ),
         )
         complex_policy = MissionPolicy(

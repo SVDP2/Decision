@@ -16,13 +16,19 @@ class CommandMuxNode(Node):
             'mission_state_topic', '/mission_state'
         ).value
         self.drive_context_topic = self.declare_parameter(
-            'drive_context_topic', '/drive_context'
+            'drive_context_topic', '/mission_context'
         ).value
         self.highway_steer_topic = self.declare_parameter(
             'highway_steer_topic', '/highway/auto_steer_angle'
         ).value
         self.highway_throttle_topic = self.declare_parameter(
             'highway_throttle_topic', '/highway/throttle_from_planning'
+        ).value
+        self.city_steer_topic = self.declare_parameter(
+            'city_steer_topic', '/city/auto_steer_angle'
+        ).value
+        self.city_throttle_topic = self.declare_parameter(
+            'city_throttle_topic', '/city/throttle_from_planning'
         ).value
         self.complex_steer_topic = self.declare_parameter(
             'complex_steer_topic', '/complex/auto_steer_angle'
@@ -57,6 +63,10 @@ class CommandMuxNode(Node):
         self.highway_steer_stamp_sec = None
         self.highway_throttle = None
         self.highway_throttle_stamp_sec = None
+        self.city_steer = None
+        self.city_steer_stamp_sec = None
+        self.city_throttle = None
+        self.city_throttle_stamp_sec = None
         self.complex_steer = None
         self.complex_steer_stamp_sec = None
         self.complex_throttle = None
@@ -76,6 +86,15 @@ class CommandMuxNode(Node):
             Float32,
             self.highway_throttle_topic,
             self.highway_throttle_callback,
+            10,
+        )
+        self.create_subscription(
+            Float32, self.city_steer_topic, self.city_steer_callback, 10
+        )
+        self.create_subscription(
+            Float32,
+            self.city_throttle_topic,
+            self.city_throttle_callback,
             10,
         )
         self.create_subscription(
@@ -120,6 +139,14 @@ class CommandMuxNode(Node):
         self.highway_throttle = float(msg.data)
         self.highway_throttle_stamp_sec = self.now_sec()
 
+    def city_steer_callback(self, msg: Float32):
+        self.city_steer = float(msg.data)
+        self.city_steer_stamp_sec = self.now_sec()
+
+    def city_throttle_callback(self, msg: Float32):
+        self.city_throttle = float(msg.data)
+        self.city_throttle_stamp_sec = self.now_sec()
+
     def complex_steer_callback(self, msg: Float32):
         self.complex_steer = float(msg.data)
         self.complex_steer_stamp_sec = self.now_sec()
@@ -133,6 +160,7 @@ class CommandMuxNode(Node):
         result = self.core.select(
             self.mission_state,
             self.make_highway_command(),
+            self.make_city_command(),
             self.make_complex_command(),
             now_sec,
         )
@@ -171,6 +199,21 @@ class CommandMuxNode(Node):
             self.highway_throttle,
             self.highway_steer_stamp_sec,
             self.highway_throttle_stamp_sec,
+        )
+
+    def make_city_command(self):
+        if (
+            self.city_steer is None
+            or self.city_throttle is None
+            or self.city_steer_stamp_sec is None
+            or self.city_throttle_stamp_sec is None
+        ):
+            return None
+        return PlannerCommand(
+            self.city_steer,
+            self.city_throttle,
+            self.city_steer_stamp_sec,
+            self.city_throttle_stamp_sec,
         )
 
     def make_complex_command(self):
