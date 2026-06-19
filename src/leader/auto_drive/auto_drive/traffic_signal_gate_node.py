@@ -65,8 +65,8 @@ class TrafficSignalGateNode(Node):
         )
 
         self.get_logger().info(
-            'Traffic signal gate ready: only a fresh, confirmed green '
-            'releases the traffic stop request.'
+            'Traffic signal gate ready: only a fresh red observation '
+            'asserts the traffic stop request.'
         )
 
     def now_sec(self):

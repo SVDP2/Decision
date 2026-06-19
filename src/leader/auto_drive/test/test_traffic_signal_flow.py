@@ -65,6 +65,42 @@ class TrafficSignalFlowTest(unittest.TestCase):
         self.assertEqual(restarted.safety_status, SafetyStatus.SAFE_OK)
         self.assertAlmostEqual(restarted.output_throttle, 0.28)
 
+    def test_not_detected_does_not_stop_inside_traffic_zone(self):
+        supervisor = MissionSupervisorCore(command_timeout_sec=2.0)
+        supervisor.set_drive_context('city')
+        supervisor.set_intersection(True)
+        supervisor.set_planning_throttle(0.28, now_sec=1.0)
+
+        gate = TrafficSignalGateCore(signal_timeout_sec=2.0)
+        self.set_signal(
+            gate, present=False, red=False, green=False, now_sec=1.0
+        )
+        decision = gate.evaluate(now_sec=1.0)
+        supervisor.set_traffic_stop(decision.stop_required)
+        snapshot = supervisor.update(now_sec=1.0)
+
+        self.assertFalse(decision.stop_required)
+        self.assertFalse(snapshot.safety_active)
+        self.assertAlmostEqual(snapshot.output_throttle, 0.28)
+
+    def test_red_does_not_stop_outside_traffic_zone(self):
+        supervisor = MissionSupervisorCore(command_timeout_sec=2.0)
+        supervisor.set_drive_context('city')
+        supervisor.set_intersection(False)
+        supervisor.set_planning_throttle(0.28, now_sec=1.0)
+
+        gate = TrafficSignalGateCore(signal_timeout_sec=2.0)
+        self.set_signal(
+            gate, present=True, red=True, green=False, now_sec=1.0
+        )
+        decision = gate.evaluate(now_sec=1.0)
+        supervisor.set_traffic_stop(decision.stop_required)
+        snapshot = supervisor.update(now_sec=1.0)
+
+        self.assertTrue(decision.stop_required)
+        self.assertFalse(snapshot.safety_active)
+        self.assertAlmostEqual(snapshot.output_throttle, 0.28)
+
 
 if __name__ == '__main__':
     unittest.main()

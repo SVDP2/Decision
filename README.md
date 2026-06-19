@@ -64,9 +64,9 @@ VLM의 `/drive_context` JSON과 mission 문자열 토픽을 분리하기 위해 
 /traffic_signal/green
 ```
 
-`mission_zones.yaml`에서 실제 정지선 접근 구간의 CSV index를 입력한 뒤
-`traffic_zone.enabled: true`로 변경한다. traffic zone 내부에서는 명확하고
-fresh한 green만 `/traffic_stop`을 해제한다.
+`mission_zones.yaml`에서 정지선 접근 구간의 CSV index와 활성 여부를 관리한다.
+traffic zone 내부에서는 fresh한 red만 `/traffic_stop`을 활성화하고
+green·미검출·unknown·stale은 주행한다.
 
 - highway / city / complex 미션 전환
 

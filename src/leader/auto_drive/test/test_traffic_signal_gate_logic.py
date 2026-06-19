@@ -9,10 +9,10 @@ class TrafficSignalGateCoreTest(unittest.TestCase):
         core.set_signal_red(red, now_sec)
         core.set_signal_green(green, now_sec)
 
-    def test_missing_signal_defaults_to_stop(self):
+    def test_missing_signal_defaults_to_go(self):
         decision = TrafficSignalGateCore().evaluate(now_sec=1.0)
 
-        self.assertTrue(decision.stop_required)
+        self.assertFalse(decision.stop_required)
         self.assertEqual(decision.state, 'STALE_OR_MISSING')
         self.assertFalse(decision.fresh)
 
@@ -34,7 +34,7 @@ class TrafficSignalGateCoreTest(unittest.TestCase):
         self.assertFalse(decision.stop_required)
         self.assertEqual(decision.state, 'GREEN')
 
-    def test_not_detected_is_fail_safe_stop(self):
+    def test_not_detected_does_not_stop(self):
         core = TrafficSignalGateCore()
         self.set_signal(
             core, present=False, red=False, green=False, now_sec=1.0
@@ -42,8 +42,19 @@ class TrafficSignalGateCoreTest(unittest.TestCase):
 
         decision = core.evaluate(now_sec=1.1)
 
-        self.assertTrue(decision.stop_required)
+        self.assertFalse(decision.stop_required)
         self.assertEqual(decision.state, 'NOT_DETECTED')
+
+    def test_present_without_color_does_not_stop(self):
+        core = TrafficSignalGateCore()
+        self.set_signal(
+            core, present=True, red=False, green=False, now_sec=1.0
+        )
+
+        decision = core.evaluate(now_sec=1.1)
+
+        self.assertFalse(decision.stop_required)
+        self.assertEqual(decision.state, 'UNKNOWN')
 
     def test_conflicting_red_and_green_stops(self):
         core = TrafficSignalGateCore()
@@ -54,15 +65,26 @@ class TrafficSignalGateCoreTest(unittest.TestCase):
         self.assertTrue(decision.stop_required)
         self.assertEqual(decision.state, 'CONFLICT')
 
-    def test_stale_green_returns_to_stop(self):
+    def test_stale_signal_does_not_stop(self):
         core = TrafficSignalGateCore(signal_timeout_sec=0.5)
         self.set_signal(core, present=True, red=False, green=True, now_sec=1.0)
 
         decision = core.evaluate(now_sec=1.6)
 
-        self.assertTrue(decision.stop_required)
+        self.assertFalse(decision.stop_required)
         self.assertEqual(decision.state, 'STALE_OR_MISSING')
         self.assertFalse(decision.fresh)
+
+    def test_stale_red_releases_stop(self):
+        core = TrafficSignalGateCore(signal_timeout_sec=0.5)
+        self.set_signal(core, present=True, red=True, green=False, now_sec=1.0)
+
+        fresh_red = core.evaluate(now_sec=1.1)
+        stale_red = core.evaluate(now_sec=1.6)
+
+        self.assertTrue(fresh_red.stop_required)
+        self.assertFalse(stale_red.stop_required)
+        self.assertEqual(stale_red.state, 'STALE_OR_MISSING')
 
 
 if __name__ == '__main__':

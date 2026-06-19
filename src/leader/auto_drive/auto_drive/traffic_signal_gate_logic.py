@@ -9,7 +9,7 @@ class TrafficSignalDecision:
 
 
 class TrafficSignalGateCore:
-    """Fail-safe traffic-signal state aggregation without ROS dependencies."""
+    """Assert a stop request only for a fresh red-light observation."""
 
     def __init__(self, signal_timeout_sec=5.0):
         self.signal_timeout_sec = max(float(signal_timeout_sec), 0.0)
@@ -34,24 +34,28 @@ class TrafficSignalGateCore:
 
     def evaluate(self, now_sec):
         now_sec = float(now_sec)
+        red_fresh = self.signal_red and self._is_stamp_fresh(
+            self.red_stamp_sec, now_sec
+        )
+        green_fresh = self.signal_green and self._is_stamp_fresh(
+            self.green_stamp_sec, now_sec
+        )
 
         # A fresh red observation always wins, including contradictory inputs.
-        if self.signal_red and self._is_stamp_fresh(
-            self.red_stamp_sec, now_sec
-        ):
-            state = 'CONFLICT' if self.signal_green else 'RED'
+        if red_fresh:
+            state = 'CONFLICT' if green_fresh else 'RED'
             return TrafficSignalDecision(True, state, True)
 
-        if not self._all_inputs_fresh(now_sec):
-            return TrafficSignalDecision(True, 'STALE_OR_MISSING', False)
-
-        if not self.signal_present:
-            return TrafficSignalDecision(True, 'NOT_DETECTED', True)
-
-        if self.signal_green and not self.signal_red:
+        if green_fresh:
             return TrafficSignalDecision(False, 'GREEN', True)
 
-        return TrafficSignalDecision(True, 'UNKNOWN', True)
+        if not self._all_inputs_fresh(now_sec):
+            return TrafficSignalDecision(False, 'STALE_OR_MISSING', False)
+
+        if not self.signal_present:
+            return TrafficSignalDecision(False, 'NOT_DETECTED', True)
+
+        return TrafficSignalDecision(False, 'UNKNOWN', True)
 
     def _all_inputs_fresh(self, now_sec):
         return all(
