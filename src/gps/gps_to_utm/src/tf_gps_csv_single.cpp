@@ -33,6 +33,8 @@ public:
     heading_valid_topic_ =
       this->declare_parameter<std::string>("heading_valid_topic", "/vehicle_heading_valid");
     path_topic_ = this->declare_parameter<std::string>("path_topic", "/csv_path");
+    origin_topic_ =
+      this->declare_parameter<std::string>("origin_topic", "/leader/map_origin_utm");
     csv_frame_id_ = this->declare_parameter<std::string>("csv_frame_id", "csv");
     vehicle_frame_id_ =
       this->declare_parameter<std::string>("vehicle_frame_id", "vehicle_ref");
@@ -44,6 +46,8 @@ public:
 
     auto path_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
     path_pub_ = this->create_publisher<nav_msgs::msg::Path>(path_topic_, path_qos);
+    origin_pub_ =
+      this->create_publisher<geometry_msgs::msg::PointStamped>(origin_topic_, path_qos);
 
     vehicle_ref_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
       vehicle_ref_topic_, 10,
@@ -151,6 +155,7 @@ private:
       }
       path_pub_->publish(path_msg_);
     }
+    publish_origin();
 
     if (!origin_x_.has_value() || !last_vehicle_ref_utm_.has_value()) {
       return;
@@ -177,11 +182,26 @@ private:
     tf_broadcaster_->sendTransform(transform);
   }
 
+  void publish_origin()
+  {
+    if (!origin_x_.has_value() || !origin_y_.has_value()) {
+      return;
+    }
+    geometry_msgs::msg::PointStamped origin_msg;
+    origin_msg.header.stamp = this->get_clock()->now();
+    origin_msg.header.frame_id = "utm";
+    origin_msg.point.x = origin_x_.value();
+    origin_msg.point.y = origin_y_.value();
+    origin_msg.point.z = 0.0;
+    origin_pub_->publish(origin_msg);
+  }
+
   std::string csv_file_path_;
   std::string vehicle_ref_topic_;
   std::string heading_topic_;
   std::string heading_valid_topic_;
   std::string path_topic_;
+  std::string origin_topic_;
   std::string csv_frame_id_;
   std::string vehicle_frame_id_;
   double path_publish_rate_hz_;
@@ -199,6 +219,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr heading_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heading_valid_sub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr origin_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

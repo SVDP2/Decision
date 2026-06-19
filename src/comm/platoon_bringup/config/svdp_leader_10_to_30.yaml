@@ -15,3 +15,9 @@ topics:
     type: platoon_interfaces/msg/Heartbeat
   /v2v/leader/reference_path:
     type: nav_msgs/msg/Path
+  /v2v/leader/reference_path_marker:
+    type: visualization_msgs/msg/Marker
+  /v2v/leader/reference_path_status:
+    type: std_msgs/msg/String
+  /leader/map_origin_utm:
+    type: geometry_msgs/msg/PointStamped

@@ -62,8 +62,11 @@ class SerialBridgeNode(Node):
         self.steer_target_pwm = 0.0
         self.speed_filtered = 0.0
         self.speed_target_pwm = 0.0
+        self.throttle_output_pwm = 0.0
         self.auto_speed = 0.0
         self.auto_angle = 0.0
+        self.steer_target_adc = 0.0
+        self.steer_current_adc = 0.0
         self.tx_packet_count = 0
         self.rx_status_packet_count = 0
         self.rx_raw_byte_count = 0
@@ -241,11 +244,58 @@ class SerialBridgeNode(Node):
         msg.bridge_crc_fail_count = int(frame.bridge_crc_fail_count)
         self.drive_telemetry_pub.publish(msg)
 
+    def update_loop_timing(self, arduino_time_ms):
+        now_ros_ms = time.time() * 1000.0
+        if self.last_ros_time_ms is None:
+            self.ros_loop_interval = 0.0
+        else:
+            self.ros_loop_interval = now_ros_ms - self.last_ros_time_ms
+        self.last_ros_time_ms = now_ros_ms
+
+        if self.last_arduino_time_ms is None:
+            self.arduino_loop_interval = 0.0
+        else:
+            self.arduino_loop_interval = (
+                arduino_time_ms - self.last_arduino_time_ms
+            )
+        self.last_arduino_time_ms = arduino_time_ms
+
+        self.ros_loop_hz = (
+            1000.0 / self.ros_loop_interval
+            if self.ros_loop_interval > 0.0
+            else 0.0
+        )
+        self.arduino_loop_hz = (
+            1000.0 / self.arduino_loop_interval
+            if self.arduino_loop_interval > 0.0
+            else 0.0
+        )
+
+    def update_status_from_telemetry(self, frame: LeaderTelemetryFrame):
+        self.update_loop_timing(float(frame.arduino_time_ms))
+        self.steer_filtered_angle = math.degrees(
+            float(frame.steering_angle_rad)
+        )
+        self.steer_target_adc = float(frame.steering_target_adc)
+        self.steer_current_adc = float(frame.steering_current_adc)
+        self.speed_filtered = float(frame.speed_estimate_mps)
+        self.speed_target_pwm = float(frame.throttle_cmd_pwm)
+        self.throttle_output_pwm = float(frame.throttle_output_pwm)
+        self.auto_speed = float(frame.auto_speed_cmd_mps)
+        self.auto_angle = math.degrees(float(frame.auto_steering_cmd_rad))
+        self.convert_to_nav_msgs(
+            self.speed_filtered, self.steer_filtered_angle
+        )
+
     def handle_leader_telemetry_bytes(self, data: bytes):
+        decoded_count = 0
         for frame in self.telemetry_parser.feed(data):
+            decoded_count += 1
             self.rx_leader_telemetry_count += 1
             self.latest_leader_telemetry_frame = frame
+            self.update_status_from_telemetry(frame)
             self.publish_drive_telemetry(frame)
+        return decoded_count
 
     def send_serial_data(self):
         if self.serial_port is None:
@@ -348,7 +398,10 @@ class SerialBridgeNode(Node):
             f'ANGLE: {self.steer_filtered_angle:>6.2f} deg',
             '[PWM]   | '
             f'DRIVE_TGT: {self.speed_target_pwm:>6.1f} | '
-            f'STEER_OUT: {self.steer_target_pwm:>6.1f}',
+            f'DRIVE_OUT: {self.throttle_output_pwm:>6.1f}',
+            '[STEER] | '
+            f'TGT_ADC: {self.steer_target_adc:>6.1f} | '
+            f'CUR_ADC: {self.steer_current_adc:>6.1f}',
             '[AUTO]  | '
             f'SPEED: {self.auto_speed:>6.2f} | '
             f'ANGLE: {self.auto_angle:>6.2f}',
@@ -366,10 +419,10 @@ class SerialBridgeNode(Node):
                 f'CMD_OK: {cmd_ok:>6} | '
                 f'CRC_FAIL: {crc_fail:>6} | '
                 f'TX: {self.tx_packet_count:>6} | '
-                f'RX: {self.rx_status_packet_count:>6}'
+                f'LEGACY_RX: {self.rx_status_packet_count:>6}'
             )
             lines.append(
-                '[RXDBG] | '
+                '[LEGACY]| '
                 f'BYTES: {self.rx_raw_byte_count:>6} | '
                 f'SYNC_DROP: {self.rx_sync_drop_count:>6} | '
                 f'CRC: {self.rx_packet_crc_fail_count:>6} | '
@@ -394,8 +447,14 @@ class SerialBridgeNode(Node):
                 if self.serial_port.in_waiting:
                     data = self.serial_port.read(self.serial_port.in_waiting)
                     self.rx_raw_byte_count += len(data)
-                    self.handle_leader_telemetry_bytes(data)
-                    buffer.extend(data)
+                    decoded_telemetry_count = (
+                        self.handle_leader_telemetry_bytes(data)
+                    )
+                    if (
+                        decoded_telemetry_count == 0
+                        and self.latest_leader_telemetry_frame is None
+                    ) or self.rx_status_packet_count > 0:
+                        buffer.extend(data)
 
                 while len(buffer) >= packet_size:
                     header_index = buffer.find(header)
@@ -438,33 +497,7 @@ class SerialBridgeNode(Node):
                         last_time_ms,
                     ) = unpacked
 
-                    now_ros_ms = time.time() * 1000.0
-                    if self.last_ros_time_ms is None:
-                        self.ros_loop_interval = 0.0
-                    else:
-                        self.ros_loop_interval = (
-                            now_ros_ms - self.last_ros_time_ms
-                        )
-                    self.last_ros_time_ms = now_ros_ms
-
-                    if self.last_arduino_time_ms is None:
-                        self.arduino_loop_interval = 0.0
-                    else:
-                        self.arduino_loop_interval = (
-                            last_time_ms - self.last_arduino_time_ms
-                        )
-                    self.last_arduino_time_ms = last_time_ms
-
-                    self.ros_loop_hz = (
-                        1000.0 / self.ros_loop_interval
-                        if self.ros_loop_interval > 0.0
-                        else 0.0
-                    )
-                    self.arduino_loop_hz = (
-                        1000.0 / self.arduino_loop_interval
-                        if self.arduino_loop_interval > 0.0
-                        else 0.0
-                    )
+                    self.update_loop_timing(float(last_time_ms))
 
                     self.steer_filtered_angle = steer_filtered_angle
                     self.steer_target_pwm = steer_target_pwm

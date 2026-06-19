@@ -17,10 +17,11 @@ def generate_launch_description():
         gps_to_utm_share_dir,
         'config',
         'path_csv',
-        'rosbag2_2026_03_30.csv',
+        #'gongD_back.csv',
+        'full_course_3_30.csv',
     )
     default_rviz_config = os.path.join(
-        auto_drive_share_dir, 'config', 'single_f9p_debug.rviz'
+        auto_drive_share_dir, 'config', 'complex.rviz'
     )
 
     csv_file_arg = DeclareLaunchArgument(

@@ -3,6 +3,11 @@ leader_v2v_adapter_node:
     drive_telemetry_topic: /leader/drive_telemetry
     encoder_twist_topic: /encoder/twist
     leader_odom_topic: /leader/localization/gps/odom
+    vehicle_ref_utm_topic: /vehicle_ref_utm
+    heading_topic: /vehicle_heading_rad
+    heading_valid_topic: /vehicle_heading_valid
+    fix_velocity_topic: /f9p/fix_velocity
+    map_origin_topic: /leader/map_origin_utm
     mission_state_topic: /mission_state
     active_algorithm_topic: /active_algorithm
     safety_status_topic: /safety_status
@@ -16,6 +21,18 @@ leader_v2v_adapter_node:
     heartbeat_rate_hz: 10.0
     wheel_base_m: 0.72
     leader_odom_timeout_sec: 0.5
+    autonomy_pose_timeout_sec: 0.5
+    heading_timeout_sec: 0.5
+    fix_velocity_timeout_sec: 0.5
+    fallback_to_leader_odom: false
+    map_frame: map
+    leader_base_frame: leader/base_link
+    origin_easting_m: 330344.301121512195095
+    origin_northing_m: 4156712.793599965050817
+    autonomy_fixed_z_m: 0.0
+    autonomy_position_variance_m2: 0.01
+    autonomy_z_variance_m2: 0.01
+    autonomy_yaw_variance_rad2: 0.01
     telemetry_timeout_sec: 0.3
     prefer_encoder_twist_speed: false
     use_throttle_signed_speed_fallback: true
@@ -28,11 +45,22 @@ leader_v2v_adapter_node:
 
 leader_reference_path_relay_node:
   ros__parameters:
+    highway_path_topic: /roi_path
+    complex_path_topic: /complex/local_path
+    leader_odom_topic: /v2v/leader/odom
     input_path_topic: /roi_path
     output_path_topic: /v2v/leader/reference_path
+    marker_topic: /v2v/leader/reference_path_marker
+    status_topic: /v2v/leader/reference_path_status
+    command_source_topic: /planning_command_source
+    mission_state_topic: /mission_state
+    active_algorithm_topic: /active_algorithm
     expected_frame_id: map
+    leader_frame_id: leader/base_link
     allow_empty_frame_id: false
     max_points: 80
     publish_rate_hz: 10.0
     input_timeout_sec: 0.5
+    source_timeout_sec: 1.0
     input_transient_local: true
+    default_source: highway

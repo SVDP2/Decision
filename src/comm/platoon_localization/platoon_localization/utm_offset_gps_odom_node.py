@@ -8,6 +8,7 @@ from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import Bool
 from std_msgs.msg import Float64
@@ -176,13 +177,18 @@ class UtmOffsetGpsOdomNode(Node):
         if self.heading_valid:
             self.latest_heading = self.fallback_heading
 
-        self.create_subscription(NavSatFix, self.fix_topic, self._fix_callback, 10)
+        self.create_subscription(
+            NavSatFix,
+            self.fix_topic,
+            self._fix_callback,
+            qos_profile_sensor_data,
+        )
         if velocity_topic:
             self.create_subscription(
                 TwistWithCovarianceStamped,
                 velocity_topic,
                 self._velocity_callback,
-                10,
+                qos_profile_sensor_data,
             )
         if heading_topic:
             self.create_subscription(Float64, heading_topic, self._heading_callback, 10)

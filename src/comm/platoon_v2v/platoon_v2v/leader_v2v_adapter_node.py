@@ -1,6 +1,7 @@
 import math
 from typing import Optional
 
+from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from platoon_interfaces.msg import Heartbeat
@@ -16,6 +17,7 @@ from rclpy.qos import HistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Bool
+from std_msgs.msg import Float64
 from std_msgs.msg import String
 
 
@@ -36,6 +38,11 @@ class LeaderV2vAdapterNode(Node):
         self.declare_parameter('drive_telemetry_topic', '/leader/drive_telemetry')
         self.declare_parameter('encoder_twist_topic', '/encoder/twist')
         self.declare_parameter('leader_odom_topic', '/leader/localization/gps/odom')
+        self.declare_parameter('vehicle_ref_utm_topic', '/vehicle_ref_utm')
+        self.declare_parameter('heading_topic', '/vehicle_heading_rad')
+        self.declare_parameter('heading_valid_topic', '/vehicle_heading_valid')
+        self.declare_parameter('fix_velocity_topic', '/f9p/fix_velocity')
+        self.declare_parameter('map_origin_topic', '/leader/map_origin_utm')
         self.declare_parameter('mission_state_topic', '/mission_state')
         self.declare_parameter('active_algorithm_topic', '/active_algorithm')
         self.declare_parameter('safety_status_topic', '/safety_status')
@@ -49,6 +56,18 @@ class LeaderV2vAdapterNode(Node):
         self.declare_parameter('heartbeat_rate_hz', 10.0)
         self.declare_parameter('wheel_base_m', 0.72)
         self.declare_parameter('leader_odom_timeout_sec', 0.5)
+        self.declare_parameter('autonomy_pose_timeout_sec', 0.5)
+        self.declare_parameter('heading_timeout_sec', 0.5)
+        self.declare_parameter('fix_velocity_timeout_sec', 0.5)
+        self.declare_parameter('fallback_to_leader_odom', False)
+        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('leader_base_frame', 'leader/base_link')
+        self.declare_parameter('origin_easting_m', 330344.301121512195095)
+        self.declare_parameter('origin_northing_m', 4156712.793599965050817)
+        self.declare_parameter('autonomy_fixed_z_m', 0.0)
+        self.declare_parameter('autonomy_position_variance_m2', 0.01)
+        self.declare_parameter('autonomy_z_variance_m2', 0.01)
+        self.declare_parameter('autonomy_yaw_variance_rad2', 0.01)
         self.declare_parameter('telemetry_timeout_sec', 0.3)
         self.declare_parameter('prefer_encoder_twist_speed', False)
         self.declare_parameter('use_throttle_signed_speed_fallback', True)
@@ -62,6 +81,30 @@ class LeaderV2vAdapterNode(Node):
         self.wheel_base_m = max(1e-3, float(self.get_parameter('wheel_base_m').value))
         self.leader_odom_timeout_sec = float(
             self.get_parameter('leader_odom_timeout_sec').value
+        )
+        self.autonomy_pose_timeout_sec = float(
+            self.get_parameter('autonomy_pose_timeout_sec').value
+        )
+        self.heading_timeout_sec = float(self.get_parameter('heading_timeout_sec').value)
+        self.fix_velocity_timeout_sec = float(
+            self.get_parameter('fix_velocity_timeout_sec').value
+        )
+        self.fallback_to_leader_odom = bool(
+            self.get_parameter('fallback_to_leader_odom').value
+        )
+        self.map_frame = str(self.get_parameter('map_frame').value)
+        self.leader_base_frame = str(self.get_parameter('leader_base_frame').value)
+        self.origin_easting_m = float(self.get_parameter('origin_easting_m').value)
+        self.origin_northing_m = float(self.get_parameter('origin_northing_m').value)
+        self.autonomy_fixed_z_m = float(self.get_parameter('autonomy_fixed_z_m').value)
+        self.autonomy_position_variance_m2 = max(
+            0.0, float(self.get_parameter('autonomy_position_variance_m2').value)
+        )
+        self.autonomy_z_variance_m2 = max(
+            0.0, float(self.get_parameter('autonomy_z_variance_m2').value)
+        )
+        self.autonomy_yaw_variance_rad2 = max(
+            0.0, float(self.get_parameter('autonomy_yaw_variance_rad2').value)
         )
         self.telemetry_timeout_sec = float(
             self.get_parameter('telemetry_timeout_sec').value
@@ -97,6 +140,13 @@ class LeaderV2vAdapterNode(Node):
         self.latest_encoder_twist_time: Optional[rclpy.time.Time] = None
         self.latest_odom: Optional[Odometry] = None
         self.latest_odom_time: Optional[rclpy.time.Time] = None
+        self.latest_vehicle_ref_utm: Optional[PointStamped] = None
+        self.latest_vehicle_ref_utm_time: Optional[rclpy.time.Time] = None
+        self.latest_heading_rad: Optional[float] = None
+        self.latest_heading_time: Optional[rclpy.time.Time] = None
+        self.latest_heading_valid = False
+        self.latest_fix_velocity: Optional[TwistWithCovarianceStamped] = None
+        self.latest_fix_velocity_time: Optional[rclpy.time.Time] = None
         self.latest_mission_state = ''
         self.latest_active_algorithm = ''
         self.latest_safety_status = 'UNKNOWN'
@@ -124,6 +174,36 @@ class LeaderV2vAdapterNode(Node):
             Odometry,
             str(self.get_parameter('leader_odom_topic').value),
             self._odom_callback,
+            10,
+        )
+        self.create_subscription(
+            PointStamped,
+            str(self.get_parameter('vehicle_ref_utm_topic').value),
+            self._vehicle_ref_utm_callback,
+            10,
+        )
+        self.create_subscription(
+            Float64,
+            str(self.get_parameter('heading_topic').value),
+            self._heading_callback,
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter('heading_valid_topic').value),
+            self._heading_valid_callback,
+            10,
+        )
+        self.create_subscription(
+            TwistWithCovarianceStamped,
+            str(self.get_parameter('fix_velocity_topic').value),
+            self._fix_velocity_callback,
+            10,
+        )
+        self.create_subscription(
+            PointStamped,
+            str(self.get_parameter('map_origin_topic').value),
+            self._map_origin_callback,
             10,
         )
         self.create_subscription(
@@ -183,7 +263,9 @@ class LeaderV2vAdapterNode(Node):
         self.get_logger().info(
             'leader_v2v_adapter_node started: '
             f'wheel_base_m={self.wheel_base_m:.3f}, '
-            f'leader_odom_timeout_sec={self.leader_odom_timeout_sec:.2f}, '
+            f'autonomy_origin=({self.origin_easting_m:.3f}, '
+            f'{self.origin_northing_m:.3f}), '
+            f'fallback_to_leader_odom={self.fallback_to_leader_odom}, '
             f'telemetry_timeout_sec={self.telemetry_timeout_sec:.2f}'
         )
 
@@ -198,6 +280,37 @@ class LeaderV2vAdapterNode(Node):
     def _odom_callback(self, msg: Odometry) -> None:
         self.latest_odom = msg
         self.latest_odom_time = self.get_clock().now()
+
+    def _vehicle_ref_utm_callback(self, msg: PointStamped) -> None:
+        self.latest_vehicle_ref_utm = msg
+        self.latest_vehicle_ref_utm_time = self.get_clock().now()
+
+    def _heading_callback(self, msg: Float64) -> None:
+        self.latest_heading_rad = float(msg.data)
+        self.latest_heading_time = self.get_clock().now()
+
+    def _heading_valid_callback(self, msg: Bool) -> None:
+        self.latest_heading_valid = bool(msg.data)
+
+    def _fix_velocity_callback(self, msg: TwistWithCovarianceStamped) -> None:
+        self.latest_fix_velocity = msg
+        self.latest_fix_velocity_time = self.get_clock().now()
+
+    def _map_origin_callback(self, msg: PointStamped) -> None:
+        if not self._all_finite(msg.point.x, msg.point.y):
+            return
+        previous = (self.origin_easting_m, self.origin_northing_m)
+        self.origin_easting_m = float(msg.point.x)
+        self.origin_northing_m = float(msg.point.y)
+        if (
+            abs(previous[0] - self.origin_easting_m) > 1e-6
+            or abs(previous[1] - self.origin_northing_m) > 1e-6
+        ):
+            self.get_logger().info(
+                'V2V map origin updated from leader origin topic: '
+                f'easting={self.origin_easting_m:.6f}, '
+                f'northing={self.origin_northing_m:.6f}'
+            )
 
     def _mission_callback(self, msg: String) -> None:
         self.latest_mission_state = msg.data
@@ -220,7 +333,14 @@ class LeaderV2vAdapterNode(Node):
         self.mission_pub.publish(self._build_mission_state(now, telemetry))
         self.safety_pub.publish(self._build_safety_state(now, telemetry))
 
-        if self.latest_odom is not None and self._odom_fresh(now):
+        autonomy_odom = self._build_autonomy_odom(now)
+        if autonomy_odom is not None:
+            self.odom_pub.publish(autonomy_odom)
+        elif (
+            self.fallback_to_leader_odom
+            and self.latest_odom is not None
+            and self._odom_fresh(now)
+        ):
             self.odom_pub.publish(self.latest_odom)
 
         heartbeat_age_sec = (now - self.last_heartbeat_time).nanoseconds * 1e-9
@@ -316,6 +436,40 @@ class LeaderV2vAdapterNode(Node):
         msg.status = 'OK' if msg.system_ok else 'TELEMETRY_TIMEOUT'
         return msg
 
+    def _build_autonomy_odom(self, now: rclpy.time.Time) -> Optional[Odometry]:
+        if (
+            self.latest_vehicle_ref_utm is None
+            or self.latest_heading_rad is None
+            or not self._vehicle_ref_utm_fresh(now)
+            or not self._heading_fresh(now)
+        ):
+            return None
+
+        point = self.latest_vehicle_ref_utm.point
+        heading_rad = float(self.latest_heading_rad)
+        if not self._all_finite(point.x, point.y, heading_rad):
+            return None
+
+        msg = Odometry()
+        msg.header.stamp = self.latest_vehicle_ref_utm.header.stamp
+        msg.header.frame_id = self.map_frame
+        msg.child_frame_id = self.leader_base_frame
+        msg.pose.pose.position.x = float(point.x) - self.origin_easting_m
+        msg.pose.pose.position.y = float(point.y) - self.origin_northing_m
+        msg.pose.pose.position.z = self.autonomy_fixed_z_m
+        msg.pose.pose.orientation = self._quaternion_from_yaw(heading_rad)
+        self._fill_autonomy_pose_covariance(msg)
+
+        if self.latest_fix_velocity is not None and self._fix_velocity_fresh(now):
+            msg.twist = self.latest_fix_velocity.twist
+        return msg
+
+    def _fill_autonomy_pose_covariance(self, msg: Odometry) -> None:
+        msg.pose.covariance[0] = self.autonomy_position_variance_m2
+        msg.pose.covariance[7] = self.autonomy_position_variance_m2
+        msg.pose.covariance[14] = self.autonomy_z_variance_m2
+        msg.pose.covariance[35] = self.autonomy_yaw_variance_rad2
+
     def _resolve_speed_mps(self, now: rclpy.time.Time) -> float:
         if (
             self.prefer_encoder_twist_speed
@@ -365,6 +519,38 @@ class LeaderV2vAdapterNode(Node):
             return False
         age_sec = (now - self.latest_odom_time).nanoseconds * 1e-9
         return age_sec <= self.leader_odom_timeout_sec
+
+    def _vehicle_ref_utm_fresh(self, now: rclpy.time.Time) -> bool:
+        if self.latest_vehicle_ref_utm_time is None:
+            return False
+        age_sec = (now - self.latest_vehicle_ref_utm_time).nanoseconds * 1e-9
+        return age_sec <= self.autonomy_pose_timeout_sec
+
+    def _heading_fresh(self, now: rclpy.time.Time) -> bool:
+        if self.latest_heading_time is None or not self.latest_heading_valid:
+            return False
+        age_sec = (now - self.latest_heading_time).nanoseconds * 1e-9
+        return age_sec <= self.heading_timeout_sec
+
+    def _fix_velocity_fresh(self, now: rclpy.time.Time) -> bool:
+        if self.latest_fix_velocity_time is None:
+            return False
+        age_sec = (now - self.latest_fix_velocity_time).nanoseconds * 1e-9
+        return age_sec <= self.fix_velocity_timeout_sec
+
+    @staticmethod
+    def _quaternion_from_yaw(yaw_rad: float):
+        from geometry_msgs.msg import Quaternion
+
+        quat = Quaternion()
+        half_yaw = 0.5 * yaw_rad
+        quat.z = math.sin(half_yaw)
+        quat.w = math.cos(half_yaw)
+        return quat
+
+    @staticmethod
+    def _all_finite(*values: float) -> bool:
+        return all(math.isfinite(float(value)) for value in values)
 
     @staticmethod
     def _mode_to_mission(telemetry: Optional[LeaderDriveTelemetry]) -> str:

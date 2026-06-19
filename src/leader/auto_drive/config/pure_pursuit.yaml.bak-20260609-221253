@@ -14,8 +14,8 @@ pure_pursuit_node:
     curvature_ema_alpha: 0.7
     ld_ema_alpha: 0.5
     steer_limit_deg: 20.0
-    min_throttle: 0.38
-    max_throttle: 0.38
+    min_throttle: 0.35
+    max_throttle: 0.50
     throttle_ema_alpha: 0.5
     control_rate_hz: 30.0
     steer_zero_when_heading_invalid: true

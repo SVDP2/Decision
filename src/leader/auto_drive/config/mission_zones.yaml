@@ -5,7 +5,7 @@ mission_zone_node:
     status_topic: "/mission_zone_status"
     marker_topic: "/mission_zones"
     csv_file_path: ""
-    csv_frame_id: "vehicle_ref"
+    csv_frame_id: "map"
     marker_publish_rate_hz: 2.0
     context_latch_duration_sec: 2.0
 
@@ -15,9 +15,9 @@ mission_zone_node:
     zone_names: ["complex_start", "highway_resume"]
 
     complex_start:
-      enabled: false
+      enabled: true
       mode: "csv_index"
-      csv_index: 300
+      csv_index: 1300
       radius: 4.0
       context: "complex"
       once: true
@@ -27,7 +27,7 @@ mission_zone_node:
     highway_resume:
       enabled: false
       mode: "csv_index"
-      csv_index: 1400
+      csv_index: 100
       radius: 4.0
       context: "highway"
       once: true

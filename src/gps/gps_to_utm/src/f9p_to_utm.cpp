@@ -10,7 +10,9 @@ public:
     : Node("f9p_to_utm_node")
     {
         subscription_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-            "/f9p/fix", 10, std::bind(&F9pToUtm::topic_callback, this, std::placeholders::_1));
+            "/f9p/fix",
+            rclcpp::SensorDataQoS(),
+            std::bind(&F9pToUtm::topic_callback, this, std::placeholders::_1));
         
         publisher_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/f9p_utm", 10);
 

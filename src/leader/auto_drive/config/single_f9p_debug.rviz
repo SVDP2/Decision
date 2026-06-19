@@ -49,16 +49,16 @@ Visualization Manager:
         Z: 0
       Plane: XY
       Plane Cell Count: 120
-      Reference Frame: csv
+      Reference Frame: map
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        csv:
+        leader/base_link:
           Value: true
-        vehicle_ref:
+        map:
           Value: true
       Marker Scale: 1.2000000476837158
       Name: TF
@@ -66,8 +66,8 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        csv:
-          vehicle_ref:
+        map:
+          leader/base_link:
             {}
       Update Interval: 0
       Value: true
@@ -226,7 +226,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 24; 28; 36
-    Fixed Frame: csv
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -285,7 +285,7 @@ Visualization Manager:
       Name: Current View
       Near Clip Distance: 0.009999999776482582
       Pitch: 1.2347966432571411
-      Target Frame: vehicle_ref
+      Target Frame: leader/base_link
       Value: ThirdPersonFollower (rviz_default_plugins)
       Yaw: 5.818184852600098
     Saved: ~

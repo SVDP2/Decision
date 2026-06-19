@@ -21,7 +21,7 @@ def generate_launch_description():
  
           DeclareLaunchArgument('host',                  default_value='gnss.eseoul.go.kr'),
           DeclareLaunchArgument('port',                  default_value='2101'),
-          DeclareLaunchArgument('mountpoint',            default_value='SUWN-RTCM32'),  # SONP-RTCM23   SONP-RTCM31   SONP-RTCM32  SUWN-RTCM23   SUWN-RTCM31   SUWN-RTCM32   SUWN-BINEX
+          DeclareLaunchArgument('mountpoint',            default_value='SONP-RTCM32'),  # SONP-RTCM23   SONP-RTCM31   SONP-RTCM32  SUWN-RTCM23   SUWN-RTCM31   SUWN-RTCM32   SUWN-BINEX
           DeclareLaunchArgument('ntrip_version',         default_value='Ntrip/2.0'),
           DeclareLaunchArgument('authenticate',          default_value='True'),
           DeclareLaunchArgument('username',              default_value='seoul'),

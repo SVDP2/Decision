@@ -36,10 +36,14 @@ public:
 
         // GPS 토픽 구독자 설정
         gps1_subscription_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-            gps1_topic, 10, std::bind(&AzimuthAngleCalculator::gps1_callback, this, std::placeholders::_1));
+            gps1_topic,
+            rclcpp::SensorDataQoS(),
+            std::bind(&AzimuthAngleCalculator::gps1_callback, this, std::placeholders::_1));
         
         gps2_subscription_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-            gps2_topic, 10, std::bind(&AzimuthAngleCalculator::gps2_callback, this, std::placeholders::_1));
+            gps2_topic,
+            rclcpp::SensorDataQoS(),
+            std::bind(&AzimuthAngleCalculator::gps2_callback, this, std::placeholders::_1));
 
         // Mission state 구독자 설정
         mission_state_subscription_ = this->create_subscription<std_msgs::msg::String>(

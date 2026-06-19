@@ -15,7 +15,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument(
             'enable_reference_path',
-            default_value='false',
+            default_value='true',
             description='Relay leader /roi_path to /v2v/leader/reference_path.',
         ),
         Node(
