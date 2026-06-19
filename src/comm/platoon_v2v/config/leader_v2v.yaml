@@ -61,6 +61,7 @@ leader_reference_path_relay_node:
     max_points: 80
     publish_rate_hz: 10.0
     input_timeout_sec: 0.5
+    leader_odom_timeout_sec: 0.5
     source_timeout_sec: 1.0
     input_transient_local: true
     default_source: highway

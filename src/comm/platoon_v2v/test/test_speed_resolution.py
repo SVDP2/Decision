@@ -1,4 +1,9 @@
+import math
+
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry, Path
 from platoon_interfaces.msg import LeaderDriveTelemetry
+from platoon_v2v.leader_reference_path_relay_node import LeaderReferencePathRelayNode
 from platoon_v2v.leader_v2v_adapter_node import LeaderV2vAdapterNode
 from platoon_v2v.speed_resolution import signed_speed_from_telemetry
 import pytest
@@ -73,3 +78,78 @@ def test_odom_fresh_rejects_odom_after_timeout():
 
     assert node._odom_fresh(Time(nanoseconds=500_000_000))
     assert not node._odom_fresh(Time(nanoseconds=600_000_000))
+
+
+class _Clock:
+    def __init__(self, now):
+        self._now = now
+
+    def now(self):
+        return self._now
+
+
+def _relay_for_path_transform(now_ns=0):
+    node = LeaderReferencePathRelayNode.__new__(LeaderReferencePathRelayNode)
+    node.expected_frame_id = 'map'
+    node.leader_frame_id = 'leader/base_link'
+    node.allow_empty_frame_id = False
+    node.leader_odom_timeout_sec = 0.5
+    node.latest_leader_odom = None
+    node.latest_leader_odom_time = None
+    node.get_clock = lambda: _Clock(Time(nanoseconds=now_ns))
+    return node
+
+
+def _path_in_leader_frame():
+    path = Path()
+    path.header.frame_id = 'leader/base_link'
+    for x in (1.0, 2.0):
+        pose = PoseStamped()
+        pose.header.frame_id = path.header.frame_id
+        pose.pose.position.x = x
+        pose.pose.orientation.w = 1.0
+        path.poses.append(pose)
+    return path
+
+
+def _leader_odom(*, frame_id='map', x=10.0, y=2.0, yaw=math.pi / 2.0):
+    odom = Odometry()
+    odom.header.frame_id = frame_id
+    odom.pose.pose.position.x = x
+    odom.pose.pose.position.y = y
+    odom.pose.pose.orientation.z = math.sin(0.5 * yaw)
+    odom.pose.pose.orientation.w = math.cos(0.5 * yaw)
+    return odom
+
+
+def test_reference_path_relay_transforms_fresh_complex_path_to_map():
+    node = _relay_for_path_transform(now_ns=200_000_000)
+    node.latest_leader_odom = _leader_odom()
+    node.latest_leader_odom_time = Time(nanoseconds=0)
+    drops = []
+    node._warn_drop = lambda source, reason: drops.append((source, reason))
+
+    converted = node._normalize_path('complex', _path_in_leader_frame())
+
+    assert converted is not None
+    assert converted.header.frame_id == 'map'
+    assert converted.poses[0].pose.position.x == pytest.approx(10.0)
+    assert converted.poses[0].pose.position.y == pytest.approx(3.0)
+    assert converted.poses[1].pose.position.x == pytest.approx(10.0)
+    assert converted.poses[1].pose.position.y == pytest.approx(4.0)
+    assert drops == []
+
+
+def test_reference_path_relay_rejects_stale_odom_for_complex_transform():
+    node = _relay_for_path_transform(now_ns=600_000_000)
+    node.latest_leader_odom = _leader_odom()
+    node.latest_leader_odom_time = Time(nanoseconds=0)
+    drops = []
+    node._warn_drop = lambda source, reason: drops.append((source, reason))
+
+    converted = node._normalize_path('complex', _path_in_leader_frame())
+
+    assert converted is None
+    assert drops == [
+        ('complex', 'stale_leader_odom_for_frame_transform:0.60s')
+    ]

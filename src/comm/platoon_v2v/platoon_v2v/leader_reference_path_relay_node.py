@@ -85,6 +85,7 @@ class LeaderReferencePathRelayNode(Node):
         self.declare_parameter('max_points', 80)
         self.declare_parameter('publish_rate_hz', 10.0)
         self.declare_parameter('input_timeout_sec', 0.5)
+        self.declare_parameter('leader_odom_timeout_sec', 0.5)
         self.declare_parameter('source_timeout_sec', 1.0)
         self.declare_parameter('input_transient_local', True)
         self.declare_parameter('default_source', 'highway')
@@ -94,6 +95,10 @@ class LeaderReferencePathRelayNode(Node):
         self.allow_empty_frame_id = bool(self.get_parameter('allow_empty_frame_id').value)
         self.max_points = max(2, int(self.get_parameter('max_points').value))
         self.input_timeout_sec = max(0.0, float(self.get_parameter('input_timeout_sec').value))
+        self.leader_odom_timeout_sec = max(
+            0.0,
+            float(self.get_parameter('leader_odom_timeout_sec').value),
+        )
         self.source_timeout_sec = max(0.0, float(self.get_parameter('source_timeout_sec').value))
         self.default_source = normalize_source(str(self.get_parameter('default_source').value))
         if not self.default_source:
@@ -223,14 +228,30 @@ class LeaderReferencePathRelayNode(Node):
         if not self.expected_frame_id or frame_id == self.expected_frame_id:
             return msg
         if source == 'complex' and frame_id == self.leader_frame_id:
+            reason = self._leader_odom_transform_unavailable_reason()
+            if reason is not None:
+                self._warn_drop(source, reason)
+                return None
             converted = self._leader_frame_path_to_map(msg)
             if converted is None:
-                self._warn_drop(source, 'missing_leader_odom_for_frame_transform')
+                self._warn_drop(source, 'invalid_leader_odom_for_frame_transform')
             return converted
         if self.expected_frame_id and frame_id != self.expected_frame_id:
             self._warn_drop(source, f'frame_mismatch:{frame_id}')
             return None
         return msg
+
+    def _leader_odom_transform_unavailable_reason(self) -> Optional[str]:
+        leader_odom = self.latest_leader_odom
+        if leader_odom is None or self.latest_leader_odom_time is None:
+            return 'missing_leader_odom_for_frame_transform'
+        if leader_odom.header.frame_id != self.expected_frame_id:
+            return 'leader_odom_frame_mismatch_for_frame_transform'
+        now = self.get_clock().now()
+        age_sec = (now - self.latest_leader_odom_time).nanoseconds * 1e-9
+        if age_sec > self.leader_odom_timeout_sec:
+            return f'stale_leader_odom_for_frame_transform:{age_sec:.2f}s'
+        return None
 
     def _leader_frame_path_to_map(self, msg: Path) -> Optional[Path]:
         leader_odom = self.latest_leader_odom

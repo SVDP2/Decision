@@ -21,7 +21,7 @@ mission_zone_node:
     city_zone:
       enabled: true
       mode: "csv_index"
-      csv_index: 100
+      csv_index: 500
       radius: 4.0
       context: "city"
       once: true
@@ -41,10 +41,10 @@ mission_zone_node:
     # Set the measured stop-line approach indices before enabling this zone.
     # Do not copy coordinates from Mandol_all: they are outside this CSV route.
     traffic_zone:
-      enabled: false
+      enabled: true
       mode: "csv_range"
-      start_index: 0
-      end_index: 0
+      start_index: 600
+      end_index: 700
       radius: 2.0
       context: ""
       once: false

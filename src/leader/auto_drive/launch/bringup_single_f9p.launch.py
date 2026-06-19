@@ -37,7 +37,7 @@ def generate_launch_description():
         'use_serial_bridge', default_value='true'
     )
     serial_port_arg = DeclareLaunchArgument(
-        'serial_port', default_value='/dev/ttyACM0'
+        'serial_port', default_value='/dev/ttyACM1'
     )
     publish_velodyne_tf_arg = DeclareLaunchArgument(
         'publish_velodyne_tf',

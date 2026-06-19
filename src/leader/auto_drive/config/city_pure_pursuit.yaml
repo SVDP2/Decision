@@ -16,8 +16,8 @@ city_pure_pursuit_node:
     ld_ema_alpha: 0.5
     steer_limit_deg: 20.0
     # Nominal CITY throttle. Supervisor applies only an absolute safety cap.
-    min_throttle: 0.28
-    max_throttle: 0.28
+    min_throttle: 0.38
+    max_throttle: 0.38
     throttle_ema_alpha: 0.5
     control_rate_hz: 30.0
     steer_zero_when_heading_invalid: true
