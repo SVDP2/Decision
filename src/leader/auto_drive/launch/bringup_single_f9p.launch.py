@@ -18,7 +18,7 @@ def generate_launch_description():
         'config',
         'path_csv',
         #'gongD_back.csv',
-        'full_course_3_30.csv',
+        'gongD131.csv',
     )
     default_rviz_config = os.path.join(
         auto_drive_share_dir, 'config', 'complex.rviz'
@@ -37,7 +37,7 @@ def generate_launch_description():
         'use_serial_bridge', default_value='true'
     )
     serial_port_arg = DeclareLaunchArgument(
-        'serial_port', default_value='/dev/ttyACM1'
+        'serial_port', default_value='/dev/ttyACM0'
     )
     publish_velodyne_tf_arg = DeclareLaunchArgument(
         'publish_velodyne_tf',

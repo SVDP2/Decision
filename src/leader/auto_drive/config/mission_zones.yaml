@@ -31,7 +31,8 @@ mission_zone_node:
     complex_start:
       enabled: true
       mode: "csv_index"
-      csv_index: 1300
+      csv_index: 720
+      #csv_index: 1300
       radius: 4.0
       context: "complex"
       once: true
