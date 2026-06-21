@@ -64,7 +64,7 @@ class PathSample:
 
 
 class LeaderReferencePathRelayNode(Node):
-    """Publish the leader's active planning path to the V2V reference-path contract."""
+    """Publish the leader breadcrumb plus active planning path as one V2V path."""
 
     def __init__(self) -> None:
         super().__init__('leader_reference_path_relay_node')
@@ -89,6 +89,10 @@ class LeaderReferencePathRelayNode(Node):
         self.declare_parameter('source_timeout_sec', 1.0)
         self.declare_parameter('input_transient_local', True)
         self.declare_parameter('default_source', 'highway')
+        self.declare_parameter('enable_breadcrumb', True)
+        self.declare_parameter('breadcrumb_min_point_spacing_m', 0.10)
+        self.declare_parameter('breadcrumb_max_path_length_m', 15.0)
+        self.declare_parameter('breadcrumb_max_position_jump_m', 0.75)
 
         self.expected_frame_id = str(self.get_parameter('expected_frame_id').value)
         self.leader_frame_id = str(self.get_parameter('leader_frame_id').value)
@@ -103,6 +107,19 @@ class LeaderReferencePathRelayNode(Node):
         self.default_source = normalize_source(str(self.get_parameter('default_source').value))
         if not self.default_source:
             self.default_source = 'highway'
+        self.enable_breadcrumb = bool(self.get_parameter('enable_breadcrumb').value)
+        self.breadcrumb_min_point_spacing_m = max(
+            0.01,
+            float(self.get_parameter('breadcrumb_min_point_spacing_m').value),
+        )
+        self.breadcrumb_max_path_length_m = max(
+            0.0,
+            float(self.get_parameter('breadcrumb_max_path_length_m').value),
+        )
+        self.breadcrumb_max_position_jump_m = max(
+            0.01,
+            float(self.get_parameter('breadcrumb_max_position_jump_m').value),
+        )
         publish_rate_hz = max(0.5, float(self.get_parameter('publish_rate_hz').value))
         input_transient_local = bool(self.get_parameter('input_transient_local').value)
 
@@ -110,6 +127,7 @@ class LeaderReferencePathRelayNode(Node):
         self.complex_path: Optional[PathSample] = None
         self.latest_leader_odom: Optional[Odometry] = None
         self.latest_leader_odom_time: Optional[rclpy.time.Time] = None
+        self.leader_breadcrumb: list[PoseStamped] = []
         self.command_source = ''
         self.command_source_time: Optional[rclpy.time.Time] = None
         self.mission_source = ''
@@ -188,6 +206,8 @@ class LeaderReferencePathRelayNode(Node):
     def _leader_odom_callback(self, msg: Odometry) -> None:
         self.latest_leader_odom = msg
         self.latest_leader_odom_time = self.get_clock().now()
+        if self.enable_breadcrumb:
+            self._append_breadcrumb_from_odom(msg)
 
     def _command_source_callback(self, msg: String) -> None:
         source = normalize_source(msg.data)
@@ -304,21 +324,104 @@ class LeaderReferencePathRelayNode(Node):
             output.poses.append(converted)
         return output
 
+    def _append_breadcrumb_from_odom(self, msg: Odometry) -> None:
+        if msg.header.frame_id != self.expected_frame_id:
+            self.leader_breadcrumb = []
+            return
+        pose = PoseStamped()
+        pose.header = msg.header
+        pose.header.frame_id = self.expected_frame_id
+        pose.pose = msg.pose.pose
+        if not self.leader_breadcrumb:
+            self.leader_breadcrumb = [pose]
+            return
+
+        distance_m = self._pose_distance_xy(self.leader_breadcrumb[-1], pose)
+        if not math.isfinite(distance_m):
+            return
+        if distance_m > self.breadcrumb_max_position_jump_m:
+            self.leader_breadcrumb = [pose]
+            return
+        if distance_m < self.breadcrumb_min_point_spacing_m:
+            self.leader_breadcrumb[-1] = pose
+            return
+        self.leader_breadcrumb.append(pose)
+        self._prune_breadcrumb()
+
+    def _prune_breadcrumb(self) -> None:
+        if self.breadcrumb_max_path_length_m <= 0.0 or len(self.leader_breadcrumb) <= 1:
+            return
+        kept = [self.leader_breadcrumb[-1]]
+        length_m = 0.0
+        for pose in reversed(self.leader_breadcrumb[:-1]):
+            segment_m = self._pose_distance_xy(pose, kept[-1])
+            if not math.isfinite(segment_m):
+                continue
+            if length_m + segment_m > self.breadcrumb_max_path_length_m:
+                break
+            length_m += segment_m
+            kept.append(pose)
+        self.leader_breadcrumb = list(reversed(kept))
+
+    @staticmethod
+    def _pose_distance_xy(a: PoseStamped, b: PoseStamped) -> float:
+        return math.hypot(
+            float(a.pose.position.x) - float(b.pose.position.x),
+            float(a.pose.position.y) - float(b.pose.position.y),
+        )
+
+    def _combined_reference_path(self, forward_path: Optional[Path]) -> Path:
+        output = Path()
+        if forward_path is not None:
+            output.header = forward_path.header
+            output.header.frame_id = self.expected_frame_id
+        elif self.leader_breadcrumb:
+            output.header = self.leader_breadcrumb[-1].header
+            output.header.frame_id = self.expected_frame_id
+        else:
+            output.header.frame_id = self.expected_frame_id
+
+        output.poses = []
+        if self.enable_breadcrumb:
+            output.poses.extend(self.leader_breadcrumb)
+        if forward_path is not None:
+            for pose in forward_path.poses[: self.max_points]:
+                if (
+                    output.poses
+                    and self._pose_distance_xy(output.poses[-1], pose)
+                    < self.breadcrumb_min_point_spacing_m
+                ):
+                    continue
+                output.poses.append(pose)
+        return output
+
     def _publish_loop(self) -> None:
         now = self.get_clock().now()
         source = self._select_source(now)
         sample = self.complex_path if source == 'complex' else self.highway_path
         if sample is None:
+            output = self._combined_reference_path(None)
+            if len(output.poses) >= 2:
+                self.path_pub.publish(output)
+                self.marker_pub.publish(self._make_path_marker(output, 'breadcrumb'))
+                self._publish_status(f'breadcrumb_only:{source}_missing:{len(output.poses)}')
+                return
             self._publish_status(f'{source}_missing')
             return
         age_sec = (now - sample.stamp).nanoseconds * 1e-9
         if age_sec > self.input_timeout_sec:
+            output = self._combined_reference_path(None)
+            if len(output.poses) >= 2:
+                self.path_pub.publish(output)
+                self.marker_pub.publish(self._make_path_marker(output, 'breadcrumb'))
+                self._publish_status(
+                    f'breadcrumb_only:{source}_stale:{age_sec:.2f}s:{len(output.poses)}'
+                )
+                return
             self._publish_status(f'{source}_stale:{age_sec:.2f}s')
             return
 
-        output = Path()
-        output.header = sample.path.header
-        output.poses = list(sample.path.poses[: self.max_points])
+        output = self._combined_reference_path(sample.path)
         self.path_pub.publish(output)
         self.marker_pub.publish(self._make_path_marker(output, source))
         self._publish_status(f'{source}:ok:{len(output.poses)}')

@@ -94,6 +94,12 @@ def _relay_for_path_transform(now_ns=0):
     node.leader_frame_id = 'leader/base_link'
     node.allow_empty_frame_id = False
     node.leader_odom_timeout_sec = 0.5
+    node.max_points = 80
+    node.enable_breadcrumb = True
+    node.breadcrumb_min_point_spacing_m = 0.1
+    node.breadcrumb_max_path_length_m = 15.0
+    node.breadcrumb_max_position_jump_m = 0.75
+    node.leader_breadcrumb = []
     node.latest_leader_odom = None
     node.latest_leader_odom_time = None
     node.get_clock = lambda: _Clock(Time(nanoseconds=now_ns))
@@ -122,6 +128,18 @@ def _leader_odom(*, frame_id='map', x=10.0, y=2.0, yaw=math.pi / 2.0):
     return odom
 
 
+def _map_path(*xs):
+    path = Path()
+    path.header.frame_id = 'map'
+    for x in xs:
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.pose.position.x = float(x)
+        pose.pose.orientation.w = 1.0
+        path.poses.append(pose)
+    return path
+
+
 def test_reference_path_relay_transforms_fresh_complex_path_to_map():
     node = _relay_for_path_transform(now_ns=200_000_000)
     node.latest_leader_odom = _leader_odom()
@@ -138,6 +156,38 @@ def test_reference_path_relay_transforms_fresh_complex_path_to_map():
     assert converted.poses[1].pose.position.x == pytest.approx(10.0)
     assert converted.poses[1].pose.position.y == pytest.approx(4.0)
     assert drops == []
+
+
+def test_reference_path_relay_prepends_leader_breadcrumb_to_forward_path():
+    node = _relay_for_path_transform()
+    node._append_breadcrumb_from_odom(_leader_odom(x=0.0, y=0.0, yaw=0.0))
+    node._append_breadcrumb_from_odom(_leader_odom(x=0.2, y=0.0, yaw=0.0))
+
+    output = node._combined_reference_path(_map_path(1.0, 2.0))
+
+    assert output.header.frame_id == 'map'
+    assert [pose.pose.position.x for pose in output.poses] == pytest.approx(
+        [0.0, 0.2, 1.0, 2.0]
+    )
+
+
+def test_reference_path_relay_can_publish_breadcrumb_only_path():
+    node = _relay_for_path_transform()
+    node._append_breadcrumb_from_odom(_leader_odom(x=0.0, y=0.0, yaw=0.0))
+    node._append_breadcrumb_from_odom(_leader_odom(x=0.2, y=0.0, yaw=0.0))
+
+    output = node._combined_reference_path(None)
+
+    assert output.header.frame_id == 'map'
+    assert [pose.pose.position.x for pose in output.poses] == pytest.approx([0.0, 0.2])
+
+
+def test_reference_path_relay_resets_breadcrumb_on_position_jump():
+    node = _relay_for_path_transform()
+    node._append_breadcrumb_from_odom(_leader_odom(x=0.0, y=0.0, yaw=0.0))
+    node._append_breadcrumb_from_odom(_leader_odom(x=2.0, y=0.0, yaw=0.0))
+
+    assert [pose.pose.position.x for pose in node.leader_breadcrumb] == pytest.approx([2.0])
 
 
 def test_reference_path_relay_rejects_stale_odom_for_complex_transform():

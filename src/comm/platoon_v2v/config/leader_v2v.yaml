@@ -65,3 +65,7 @@ leader_reference_path_relay_node:
     source_timeout_sec: 1.0
     input_transient_local: true
     default_source: highway
+    enable_breadcrumb: true
+    breadcrumb_min_point_spacing_m: 0.10
+    breadcrumb_max_path_length_m: 15.0
+    breadcrumb_max_position_jump_m: 0.75
