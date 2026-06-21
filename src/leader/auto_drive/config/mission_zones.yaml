@@ -22,6 +22,7 @@ mission_zone_node:
       enabled: true
       mode: "csv_index"
       csv_index: 500
+      #csv_index: 100
       radius: 4.0
       context: "city"
       once: true
@@ -46,7 +47,7 @@ mission_zone_node:
       mode: "csv_range"
       #start_index: 80
       #end_index: 220
-      start_index: 625
+      start_index: 625 # 시연날 625
       end_index: 675
       radius: 3.0
       context: ""
