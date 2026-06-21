@@ -27,8 +27,9 @@ mission_supervisor_node:
     publish_rate_hz: 20.0
     default_mission: "highway"
     highway_throttle_scale: 1.0
-    highway_throttle_limit: 0.4
+    highway_throttle_limit: 1.0
     city_throttle_scale: 1.0
-    city_throttle_limit: 0.3
-    complex_throttle_scale: 0.6
-    complex_throttle_limit: 0.4
+    city_throttle_limit: 1.0
+    #complex_throttle_scale: 0.6
+    complex_throttle_scale: 1.0
+    complex_throttle_limit: 1.0
